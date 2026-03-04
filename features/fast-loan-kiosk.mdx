@@ -1,0 +1,436 @@
+---
+title: 'Fast Loan Kiosk'
+description: 'Self-service kiosk mode for quick document ID-based checkouts'
+icon: 'kiosk'
+---
+
+## Overview
+
+The Fast Loan Kiosk provides a streamlined, authentication-free interface for rapid item checkouts. Designed for high-traffic library environments, it allows librarians to process loans in seconds using only a user's document ID.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Rush Hours" icon="clock">
+    Handle peak traffic periods when multiple users need quick service
+  </Card>
+  <Card title="Unstaffed Kiosks" icon="computer">
+    Enable self-service terminals where users can request items without librarian assistance
+  </Card>
+  <Card title="Quick Pickups" icon="truck-fast">
+    Process pre-approved items waiting for pickup
+  </Card>
+  <Card title="Event Lending" icon="calendar">
+    Rapidly check out equipment for classes or events
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Document ID Lookup">
+    Enter user's document ID (no login required)
+  </Step>
+  <Step title="User Verification">
+    System displays user's name and role for confirmation
+  </Step>
+  <Step title="Select Item">
+    Choose catalog item and quantity from filtered list
+  </Step>
+  <Step title="Instant Loan">
+    Loan is created immediately with 'pendiente' status for later approval
+  </Step>
+</Steps>
+
+## Route Implementation
+
+The fast loan route handles both user search and loan creation:
+
+```python app/main/routes.py
+@bp.route('/fast_loan', methods=['GET', 'POST'])
+def fast_loan():
+    search_form = FastLoanSearchForm()
+    loan_form = FastLoanForm()
+
+    user_id = request.form.get('user_id')
+    user = None
+    if user_id:
+        user = User.query.get(user_id)
+    elif search_form.validate_on_submit() and search_form.submit_search.data:
+        user = User.query.filter_by(document_id=search_form.document_id.data).first()
+
+    # Filter catalog based on user role
+    exclude_cat = 'general' if user and user.role == 'premium' else None
+    all_items = CatalogService.get_catalog_with_counts(exclude_category=exclude_cat)
+    
+    # Populate loan form choices
+    loan_form.catalog_id.choices = [
+        (i.id, f"{i.title_or_name} (Disponibles: {i.available_count})") 
+        for i in all_items if i.available_count > 0
+    ]
+
+    # User search flow
+    if search_form.validate_on_submit() and search_form.submit_search.data:
+        if not user:
+            flash('Usuario no encontrado. Debes estar registrado.', 'danger')
+            return redirect(url_for('main.fast_loan'))
+        
+        return render_template('main/fast_loan.html', user=user, 
+                             search_form=search_form, loan_form=loan_form)
+
+    # Loan creation flow
+    if loan_form.validate_on_submit() and loan_form.submit_loan.data:
+        user_id = loan_form.user_id.data
+        item_type = loan_form.item_type.data
+        environment = loan_form.environment.data
+        catalog_id = loan_form.catalog_id.data
+        quantity = 1 if item_type == 'computo' else loan_form.quantity.data
+
+        success, reserved_ids, msg = InventoryService.reserve_instances(catalog_id, quantity)
+        if not success:
+            flash(msg, 'warning')
+            return redirect(url_for('main.fast_loan'))
+            
+        try:
+            for inst_id in reserved_ids:
+                LoanService.create_loan(user_id=user_id, instance_id=inst_id, 
+                                       environment=environment)
+            db.session.commit()
+            flash('Préstamo rápido registrado con éxito.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al procesar la solicitud.', 'danger')
+
+        return redirect(url_for('main.index'))
+        
+    return render_template('main/fast_loan.html', search_form=search_form, 
+                         loan_form=loan_form)
+```
+
+## Key Features
+
+### No Authentication Required
+
+The `/fast_loan` route is **not** decorated with `@login_required`, making it accessible without logging in:
+
+```python
+@bp.route('/fast_loan', methods=['GET', 'POST'])
+def fast_loan():  # Notice: no @login_required decorator
+    # ... kiosk logic
+```
+
+<Info>
+  This is the only loan creation route that doesn't require authentication, designed specifically for kiosk environments.
+</Info>
+
+### Role-Based Filtering
+
+Catalog items are automatically filtered based on the user's role:
+
+```python
+# Premium users cannot see 'general' category (they use premium items)
+exclude_cat = 'general' if user and user.role == 'premium' else None
+all_items = CatalogService.get_catalog_with_counts(exclude_category=exclude_cat)
+```
+
+### Quantity Logic
+
+Computing equipment is limited to 1 unit per request:
+
+```python
+item_type = loan_form.item_type.data
+quantity = 1 if item_type == 'computo' else loan_form.quantity.data
+```
+
+### Environment Tracking
+
+Optional field to track where the item will be used:
+
+```python
+environment = loan_form.environment.data  # e.g., "Classroom 3B", "Library"
+LoanService.create_loan(user_id=user_id, instance_id=inst_id, environment=environment)
+```
+
+## Form Structure
+
+### FastLoanSearchForm
+
+Simple document ID lookup:
+
+```python app/forms.py
+class FastLoanSearchForm(FlaskForm):
+    document_id = StringField('Documento de Identidad', 
+                             validators=[DataRequired()])
+    submit_search = SubmitField('Buscar Usuario')
+```
+
+### FastLoanForm
+
+Loan details form:
+
+```python app/forms.py
+class FastLoanForm(FlaskForm):
+    user_id = HiddenField('User ID', validators=[DataRequired()])
+    item_type = SelectField('Tipo de Artículo', 
+                           choices=[('computo', 'Computador'), 
+                                   ('accessory', 'Accesorio')],
+                           validators=[DataRequired()])
+    catalog_id = SelectField('Artículo', coerce=int, 
+                            validators=[DataRequired()])
+    quantity = IntegerField('Cantidad', default=1, 
+                           validators=[DataRequired(), NumberRange(min=1, max=5)])
+    environment = StringField('Ubicación/Ambiente')
+    submit_loan = SubmitField('Registrar Préstamo')
+```
+
+<Note>
+  The `catalog_id` choices are dynamically populated in the route based on available inventory.
+</Note>
+
+## User Experience
+
+### Step 1: Search User
+
+Librarian enters the user's document ID and clicks "Buscar Usuario":
+
+```html
+<form method="POST">
+  {{ search_form.hidden_tag() }}
+  <input type="text" name="document_id" placeholder="123456789">
+  <button type="submit" name="submit_search">Buscar</button>
+</form>
+```
+
+### Step 2: Verify User
+
+System displays user information for confirmation:
+
+```html
+{% if user %}
+  <div class="user-info">
+    <h3>{{ user.full_name }}</h3>
+    <p>Documento: {{ user.document_id }}</p>
+    <p>Rol: {{ user.role }}</p>
+  </div>
+{% endif %}
+```
+
+### Step 3: Select Item
+
+Choose from available items (filtered by role):
+
+```html
+<form method="POST">
+  {{ loan_form.hidden_tag() }}
+  <input type="hidden" name="user_id" value="{{ user.id }}">
+  
+  <select name="catalog_id">
+    {% for item in available_items %}
+      <option value="{{ item.id }}">
+        {{ item.title_or_name }} ({{ item.available_count }} disponibles)
+      </option>
+    {% endfor %}
+  </select>
+  
+  <input type="number" name="quantity" min="1" max="5">
+  <input type="text" name="environment" placeholder="Salón 3B">
+  
+  <button type="submit" name="submit_loan">Registrar Préstamo</button>
+</form>
+```
+
+### Step 4: Confirmation
+
+Success message and option to process another loan:
+
+```html
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endwith %}
+```
+
+## Validation and Error Handling
+
+### User Not Found
+
+```python
+if not user:
+    flash('Usuario no encontrado. Debes estar registrado.', 'danger')
+    return redirect(url_for('main.fast_loan'))
+```
+
+<Warning>
+  Users must be pre-registered in the system. The kiosk does not support on-the-spot registration.
+</Warning>
+
+### Insufficient Inventory
+
+```python
+success, reserved_ids, msg = InventoryService.reserve_instances(catalog_id, quantity)
+if not success:
+    flash(msg, 'warning')  # e.g., "Stock físico insuficiente"
+    return redirect(url_for('main.fast_loan'))
+```
+
+### Transaction Failures
+
+```python
+try:
+    for inst_id in reserved_ids:
+        LoanService.create_loan(user_id=user_id, instance_id=inst_id, 
+                               environment=environment)
+    db.session.commit()
+    flash('Préstamo rápido registrado con éxito.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Error al procesar la solicitud.', 'danger')
+```
+
+## Security Considerations
+
+### Public Access Route
+
+<Tabs>
+  <Tab title="Advantage">
+    Fast checkout without login overhead, ideal for high-traffic scenarios.
+  </Tab>
+  <Tab title="Risk">
+    Anyone can create loans if they know a document ID.
+  </Tab>
+  <Tab title="Mitigation">
+    - Place kiosk terminals in supervised areas
+    - Require physical ID verification
+    - All loans start as 'pendiente' requiring librarian approval
+  </Tab>
+</Tabs>
+
+### Librarian Approval Required
+
+Loans created via fast kiosk are marked as `pendiente` and require explicit approval:
+
+```python
+def create_loan(user_id, instance_id, environment=None, days=15):
+    new_loan = Loan(
+        user_id=user_id,
+        instance_id=instance_id,
+        environment=environment,
+        status='pendiente',  # Requires approval
+        due_date=due_date
+    )
+```
+
+<Info>
+  Librarians can review all kiosk loans in the admin dashboard before approving them.
+</Info>
+
+## Deployment Scenarios
+
+### Staffed Kiosk
+
+```yaml
+Setup:
+  - Dedicated terminal at librarian desk
+  - Browser locked to /fast_loan route
+  - Barcode scanner for document ID input
+  
+Workflow:
+  - User presents physical ID card
+  - Librarian scans document barcode
+  - Selects item from dropdown
+  - Confirms loan instantly
+```
+
+### Self-Service Kiosk
+
+```yaml
+Setup:
+  - Touchscreen terminal in library entrance
+  - Simplified UI with large buttons
+  - Security camera monitoring
+  
+Workflow:
+  - User enters document ID manually
+  - Reviews own information
+  - Selects item from filtered catalog
+  - Receives confirmation to pick up at desk
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="ID Verification" icon="id-badge">
+    Always verify physical ID matches the document number entered
+  </Card>
+  <Card title="Environment Tracking" icon="map-pin">
+    Use environment field consistently (e.g., always format as "Building - Room")
+  </Card>
+  <Card title="Quantity Limits" icon="hashtag">
+    Enforce reasonable limits even for non-computing items
+  </Card>
+  <Card title="Monitor Pending" icon="eye">
+    Regularly review pending loans to approve or reject quickly
+  </Card>
+</CardGroup>
+
+## Customization Options
+
+### Adjust Item Filtering
+
+Modify which categories appear for different user roles:
+
+```python
+# Example: Exclude multiple categories for cliente users
+if user.role == 'cliente':
+    exclude_cats = ['premium', 'computo']
+    all_items = [item for item in all_catalog_items 
+                if item.category not in exclude_cats]
+```
+
+### Change Quantity Limits
+
+Adjust max quantity in the form validator:
+
+```python
+quantity = IntegerField('Cantidad', default=1, 
+                       validators=[DataRequired(), NumberRange(min=1, max=10)])
+```
+
+### Custom Due Date for Kiosk Loans
+
+Set different loan periods for kiosk vs. regular loans:
+
+```python
+# In fast_loan route
+LoanService.create_loan(user_id=user_id, instance_id=inst_id, 
+                       environment=environment, days=7)  # 7-day kiosk loans
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="User Not Found Despite Valid ID">
+    Check that the user is registered in the database. Use `/admin/users/search` to verify.
+  </Accordion>
+  
+  <Accordion title="No Items Appearing in Dropdown">
+    Verify that instances exist with `status='disponible'`. Check inventory counts.
+  </Accordion>
+  
+  <Accordion title="Transaction Rollback Errors">
+    Ensure no concurrent reservation conflicts. Check database logs for locking issues.
+  </Accordion>
+  
+  <Accordion title="Form Validation Failing">
+    Confirm that `catalog_id.choices` is populated before form validation. Choices must be set in GET request.
+  </Accordion>
+</AccordionGroup>
+
+## Related Features
+
+- [Loan System](/features/loan-system) - How kiosk loans integrate with the approval workflow
+- [User Management](/features/user-management) - Document ID registration and role assignment
+- [Inventory Management](/features/inventory-management) - Real-time availability checking

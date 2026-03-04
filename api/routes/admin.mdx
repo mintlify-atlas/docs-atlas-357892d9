@@ -1,0 +1,605 @@
+---
+title: "Admin Routes"
+description: "Administrative endpoints for user management, loans, and inventory"
+---
+
+Admin routes provide administrative functionality for managing users, loans, catalog items, and physical inventory instances.
+
+## User Management
+
+### GET /users
+
+Display paginated list of all users.
+
+**Blueprint:** `admin`  
+**Methods:** `GET`  
+**Template:** `admin/users.html`  
+**Login Required:** Yes  
+**Roles:** `admin`
+
+#### Query Parameters
+
+<ParamField path="page" type="int" default="1">
+  Page number for pagination
+</ParamField>
+
+#### Response Data
+
+<ResponseField name="users" type="Pagination">
+  Paginated user list (10 per page)
+</ResponseField>
+
+<ResponseField name="form" type="AdminUserForm">
+  Form for creating new users
+</ResponseField>
+
+<ResponseField name="import_form" type="ImportForm">
+  Form for bulk user import
+</ResponseField>
+
+<ResponseField name="edit_forms" type="dict">
+  Dictionary mapping user IDs to EditUserForm instances
+</ResponseField>
+
+**Source Reference:** `app/admin/routes.py:15`
+
+---
+
+### GET /users/search
+
+Search users by name or document ID.
+
+**Blueprint:** `admin`  
+**Methods:** `GET`  
+**Template:** `admin/users.html`  
+**Login Required:** Yes  
+**Roles:** `admin`
+
+#### Query Parameters
+
+<ParamField path="search" type="str">
+  Search term (searches full_name and document_id)
+</ParamField>
+
+<ParamField path="page" type="int" default="1">
+  Page number for pagination
+</ParamField>
+
+#### Example
+
+```python
+query = User.query
+if search:
+    query = query.filter(
+        or_(
+            User.full_name.ilike(f'%{search}%'),
+            User.document_id.ilike(f'%{search}%'),
+        )
+    )
+users_pagination = query.order_by(User.full_name).paginate(
+    page=page, per_page=10, error_out=False
+)
+```
+
+**Source Reference:** `app/admin/routes.py:32`
+
+---
+
+### POST /users/create
+
+Create a new user account.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `admin`
+
+#### Form Fields
+
+<ParamField path="full_name" type="str" required>
+  User's full name
+</ParamField>
+
+<ParamField path="document_id" type="str" required>
+  Unique document ID
+</ParamField>
+
+<ParamField path="email" type="str" required>
+  Unique email address
+</ParamField>
+
+<ParamField path="phone" type="str" required>
+  Phone number
+</ParamField>
+
+<ParamField path="role" type="str" required>
+  User role: 'cliente', 'premium', 'bibliotecario', 'admin'
+</ParamField>
+
+<ParamField path="program_name" type="str">
+  Academic program (required only if role='cliente')
+</ParamField>
+
+<ParamField path="password" type="str" required>
+  Initial password
+</ParamField>
+
+#### Validation
+
+- Document ID must be unique
+- Email must be unique
+- Password is hashed before storage
+
+**Source Reference:** `app/admin/routes.py:58`
+
+---
+
+### POST /users/edit/\{id\}
+
+Update existing user information.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `admin`
+
+#### URL Parameters
+
+<ParamField path="id" type="int" required>
+  User ID to edit
+</ParamField>
+
+#### Form Fields
+
+<ParamField path="full_name" type="str" required>
+  Updated full name
+</ParamField>
+
+<ParamField path="phone" type="str" required>
+  Updated phone number
+</ParamField>
+
+<ParamField path="role" type="str" required>
+  Updated role
+</ParamField>
+
+<ParamField path="program_name" type="str">
+  Updated program (if role='cliente')
+</ParamField>
+
+<ParamField path="password" type="str">
+  Optional: New password (leave blank to keep current)
+</ParamField>
+
+#### Example
+
+```python
+user = User.query.get_or_404(id)
+form = EditUserForm()
+
+if form.validate_on_submit():
+    user.full_name = form.full_name.data
+    user.phone = form.phone.data
+    user.role = form.role.data
+    user.program_name = form.program_name.data if form.role.data == 'cliente' else None
+
+    # Optional password update
+    if form.password.data:
+        user.set_password(form.password.data)
+
+    db.session.commit()
+    flash(f'Usuario {user.full_name} actualizado.', 'success')
+```
+
+**Source Reference:** `app/admin/routes.py:93`
+
+---
+
+### POST /users/delete/\{id\}
+
+Delete a user account.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `admin`
+
+#### URL Parameters
+
+<ParamField path="id" type="int" required>
+  User ID to delete
+</ParamField>
+
+#### Business Rules
+
+- Cannot delete your own account
+- Cascading deletes handled by database relationships
+
+**Source Reference:** `app/admin/routes.py:122`
+
+---
+
+## Loan Management
+
+### GET /dashboard
+
+Admin dashboard showing loan statistics and filtered loans.
+
+**Blueprint:** `admin`  
+**Methods:** `GET`  
+**Template:** `admin/dashboard.html`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`, `admin`
+
+#### Query Parameters
+
+<ParamField path="status" type="str" default="pendiente">
+  Filter loans by status: 'pendiente', 'activo', 'devuelto', 'atrasado'
+</ParamField>
+
+#### Response Data
+
+<ResponseField name="loans" type="list[Loan]">
+  Filtered loans ordered by request_date (descending)
+</ResponseField>
+
+<ResponseField name="stats" type="dict">
+  Counts for each loan status:
+  - pending: Count of pending loans
+  - activo: Count of active loans
+  - returned: Count of returned loans
+  - atrasado: Count of overdue loans
+</ResponseField>
+
+<ResponseField name="top_items" type="list[tuple]">
+  Top 5 most requested items with loan counts
+</ResponseField>
+
+#### Example
+
+```python
+# Statistics query
+top_items = db.session.query(
+    Catalog.title_or_name,
+    func.count(Loan.id).label('total')
+).join(ItemInstance).join(Loan)\
+ .group_by(Catalog.title_or_name)\
+ .order_by(func.count(Loan.id).desc())\
+ .limit(5).all()
+
+# Status counts
+pending_count = Loan.query.filter_by(status='pendiente').count()
+activo_count = Loan.query.filter_by(status='activo').count()
+```
+
+**Source Reference:** `app/admin/routes.py:134`
+
+---
+
+### POST /approve/\{id\}
+
+Approve a pending loan request.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`
+
+#### URL Parameters
+
+<ParamField path="id" type="int" required>
+  Loan ID to approve
+</ParamField>
+
+#### Business Logic
+
+- Uses `LoanService.approve_loan()`
+- Only pending loans can be approved
+- Sets status to 'activo'
+- Records approval timestamp
+
+#### Example
+
+```python
+success, msg = LoanService.approve_loan(id)
+
+if success:
+    flash(msg, 'success')
+    return redirect(url_for('admin.admin_dashboard', status='activo'))
+else:
+    flash(msg, 'danger')
+    return redirect(url_for('admin.admin_dashboard', status='pendiente'))
+```
+
+**Source Reference:** `app/admin/routes.py:162`
+
+---
+
+### POST /loan/\{loan_id\}/return
+
+Process the return of a loaned item.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `admin`, `bibliotecario`
+
+#### URL Parameters
+
+<ParamField path="loan_id" type="int" required>
+  Loan ID to process return for
+</ParamField>
+
+#### Business Logic
+
+1. Freezes penalty amount for historical record
+2. Sets status to 'devuelto'
+3. Records return timestamp
+4. Releases instance back to inventory using `InventoryService.release_instance()`
+5. Commits transaction or rolls back on error
+
+#### Example
+
+```python
+loan = Loan.query.get_or_404(loan_id)
+
+if loan.status != 'devuelto':
+    # 1. Freeze penalty
+    loan.final_penalty = loan.penalty_fee
+    loan.status = 'devuelto'
+    loan.return_date = datetime.utcnow()
+    
+    # 2. Release inventory
+    success, msg = InventoryService.release_instance(loan.instance_id)
+    
+    if success:
+        db.session.commit()
+        flash('Ítem devuelto y reingresado al inventario con éxito.', 'success')
+    else:
+        db.session.rollback()
+        flash(f'Error al liberar inventario: {msg}', 'danger')
+```
+
+**Source Reference:** `app/admin/routes.py:174`
+
+---
+
+### POST /reject/\{id\}
+
+Reject a pending loan request.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`
+
+#### URL Parameters
+
+<ParamField path="id" type="int" required>
+  Loan ID to reject
+</ParamField>
+
+#### Business Logic
+
+- Only pending loans can be rejected
+- Sets status to 'rechazado'
+- Releases reserved instance back to 'disponible'
+- Adds rejection observation
+
+#### Example
+
+```python
+loan = Loan.query.get_or_404(id)
+if loan.status == 'pendiente':
+    loan.status = 'rechazado'
+    loan.observation = 'Rechazado por el bibliotecario.'
+    
+    if loan.item_instance:
+        loan.item_instance.status = 'disponible'
+
+    db.session.commit()
+    flash('Solicitud rechazada con éxito. Se liberó la reserva física.', 'success')
+else:
+    flash('Solo puedes rechazar solicitudes que estén pendientes.', 'warning')
+```
+
+**Source Reference:** `app/admin/routes.py:197`
+
+---
+
+## Catalog Management
+
+### GET/POST /catalog
+
+Manage catalog items (titles/names of items).
+
+**Blueprint:** `admin`  
+**Methods:** `GET`, `POST`  
+**Template:** `admin/catalog.html`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`, `admin`
+
+#### Query Parameters
+
+<ParamField path="search" type="str">
+  Search term for title_or_name and category
+</ParamField>
+
+#### Form Fields (POST)
+
+<ParamField path="title_or_name" type="str" required>
+  Item title or name
+</ParamField>
+
+<ParamField path="category" type="str" required>
+  Item category: 'computo', 'libro', 'accesorio', etc.
+</ParamField>
+
+<ParamField path="author_or_brand" type="str">
+  Author (for books) or brand (for equipment)
+</ParamField>
+
+#### Example
+
+```python
+form = CatalogForm()
+if form.validate_on_submit():
+    new_catalog_item = Catalog(
+        title_or_name=form.title_or_name.data,
+        category=form.category.data,
+        author_or_brand=form.author_or_brand.data
+    )
+    db.session.add(new_catalog_item)
+    db.session.commit()
+    flash(f'Elemento de catálogo "{form.title_or_name.data}" creado.', 'success')
+```
+
+**Source Reference:** `app/admin/routes.py:216`
+
+---
+
+### POST /catalog/delete/\{id\}
+
+Delete a catalog item.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`, `admin`
+
+#### URL Parameters
+
+<ParamField path="id" type="int" required>
+  Catalog ID to delete
+</ParamField>
+
+#### Business Rules
+
+- Cannot delete if physical instances exist
+- Check `catalog.total_count > 0`
+
+**Source Reference:** `app/admin/routes.py:244`
+
+---
+
+## Instance Management
+
+### GET/POST /catalog/\{catalog_id\}/instances
+
+Manage physical instances of a catalog item.
+
+**Blueprint:** `admin`  
+**Methods:** `GET`, `POST`  
+**Template:** `admin/instances.html`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`, `admin`
+
+#### URL Parameters
+
+<ParamField path="catalog_id" type="int" required>
+  Catalog ID to manage instances for
+</ParamField>
+
+#### Form Fields (POST)
+
+<ParamField path="unique_code" type="str" required>
+  Serial number or unique identifier (must be unique)
+</ParamField>
+
+<ParamField path="condition" type="str" required>
+  Physical condition: 'nuevo', 'bueno', 'regular', 'malo'
+</ParamField>
+
+<ParamField path="status" type="str" required>
+  Status: 'disponible', 'prestado', 'mantenimiento', 'perdido'
+</ParamField>
+
+#### Example
+
+```python
+if ItemInstance.query.filter_by(unique_code=unique_code).first():
+    flash(f'El código/serial "{unique_code}" ya está registrado.', 'danger')
+else:
+    new_instance = ItemInstance(
+        catalog_id=catalog_id,
+        unique_code=unique_code,
+        condition=condition,
+        status=status,
+    )
+    db.session.add(new_instance)
+    db.session.commit()
+    flash(f'Instancia "{unique_code}" agregada correctamente.', 'success')
+```
+
+**Source Reference:** `app/admin/routes.py:256`
+
+---
+
+### POST /instance/update_status/\{instance_id\}
+
+Update the status of a physical instance.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`, `admin`
+
+#### URL Parameters
+
+<ParamField path="instance_id" type="int" required>
+  Instance ID to update
+</ParamField>
+
+#### Form Fields
+
+<ParamField path="status" type="str" required>
+  New status: 'disponible', 'mantenimiento', 'perdido'
+</ParamField>
+
+#### Allowed Status Values
+
+- `disponible`: Item is available for loan
+- `mantenimiento`: Item is under maintenance
+- `perdido`: Item is lost
+
+**Note:** Cannot manually set to 'prestado' - this is managed by loan system
+
+**Source Reference:** `app/admin/routes.py:296`
+
+---
+
+### POST /instance/delete/\{instance_id\}
+
+Delete a physical instance.
+
+**Blueprint:** `admin`  
+**Methods:** `POST`  
+**Login Required:** Yes  
+**Roles:** `bibliotecario`, `admin`
+
+#### URL Parameters
+
+<ParamField path="instance_id" type="int" required>
+  Instance ID to delete
+</ParamField>
+
+#### Business Rules
+
+- Cannot delete if instance has active loans (pendiente, activo, atrasado)
+- Checks using `instance.loans.filter()`
+
+#### Example
+
+```python
+instance = ItemInstance.query.get_or_404(instance_id)
+catalog_id = instance.catalog_id
+
+if instance.loans.filter(Loan.status.in_(['pendiente', 'activo', 'atrasado'])).first():
+    flash('No puedes eliminar una instancia en préstamo activo.', 'danger')
+else:
+    db.session.delete(instance)
+    db.session.commit()
+    flash(f'Instancia {instance.unique_code} eliminada.', 'success')
+```
+
+**Source Reference:** `app/admin/routes.py:322`

@@ -1,97 +1,189 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "SWL Library Management System"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#2563eb] via-[#1e40af] to-[#1e3a8a] dark:from-[#1e40af] dark:via-[#1e3a8a] dark:to-[#0f1729] py-20">
+  <div className="max-w-6xl mx-auto px-6 sm:px-8">
+    <div className="text-center">
+      <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+        Complete Library Management for Modern Institutions
+      </h1>
+      <p className="text-lg sm:text-xl text-blue-100 dark:text-blue-200 max-w-3xl mx-auto mb-10">
+        Streamline equipment loans, manage inventory, and control access with an open-source platform built for educational institutions and enterprises.
+      </p>
+      <div className="flex flex-wrap justify-center gap-4">
+        <a
+          href="/quickstart"
+          className="inline-flex items-center px-8 py-3 text-base font-semibold text-[#2563eb] bg-white rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          Get Started
+        </a>
+        <a
+          href="/introduction"
+          className="inline-flex items-center px-8 py-3 text-base font-semibold text-white border-2 border-white/30 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+        >
+          Learn More
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Get Started in Minutes
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+      Set up your library management system and start serving users quickly with our streamlined installation process.
+    </p>
+  </div>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <Steps>
+    <Step title="Clone and Set Up Virtual Environment">
+      Clone the repository and create an isolated Python environment to avoid dependency conflicts.
 
-## Make it yours
+      ```bash
+      git clone https://github.com/MaickFeliz/SWL.git
+      cd SWL
+      python -m venv venv
+      source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+      ```
+    </Step>
 
-Design a docs site that looks great and empowers your users.
+    <Step title="Install Dependencies">
+      Install all required Python packages including Flask, SQLAlchemy, and other core dependencies.
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      ```bash
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
+      ```
+    </Step>
 
-## Create beautiful pages
+    <Step title="Run the Application">
+      Start the development server. The database will be automatically initialized on first run with a default admin account.
 
-Everything you need to create world-class documentation.
+      ```bash
+      python run.py
+      ```
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+      <Note>
+        Default admin credentials: Document ID `1000000000`, password `admin123`. Access the system at `http://localhost:5000` or from any device on your network at `http://0.0.0.0:5000`.
+      </Note>
+    </Step>
 
-## Need inspiration?
+    <Step title="Configure Your Library">
+      Log in with the admin account and configure user roles, add your inventory items, and customize settings to match your institution's requirements.
+    </Step>
+  </Steps>
+</div>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Core Features
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+      Everything you need to manage a modern library, from user authentication to automated overdue tracking.
+    </p>
+  </div>
+
+  <CardGroup cols={2}>
+    <Card title="Multi-Tier User Management" icon="users" href="/features/user-management">
+      Role-based access control with Admin, Librarian, Premium, and Regular user tiers for granular permissions.
+    </Card>
+    <Card title="Smart Loan System" icon="handshake" href="/features/loan-system">
+      Real-time validation, approval workflows, and automated overdue detection with penalty calculations.
+    </Card>
+    <Card title="Dynamic Inventory" icon="boxes-stacked" href="/features/inventory-management">
+      Track individual items with serial numbers, manage availability, and categorize equipment and books.
+    </Card>
+    <Card title="Fast Loan Kiosk" icon="clock" href="/features/fast-loan-kiosk">
+      Self-service mode for high-traffic environments with document ID lookup and quick checkout.
+    </Card>
+    <Card title="Visit Tracking" icon="clipboard-check" href="/features/visit-tracking">
+      Log library visits and generate usage statistics for resource planning and reporting.
+    </Card>
+    <Card title="Automated Scheduling" icon="calendar-days" href="/admin/configuration">
+      Background tasks check for overdue loans daily and update statuses automatically.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Explore by Role
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+      Find the documentation you need based on your role in the system.
+    </p>
+  </div>
+
+  <CardGroup cols={2}>
+    <Card title="Student Guide" icon="graduation-cap" href="/guides/student-guide">
+      Learn how to request equipment, check loan status, and manage your account as a regular user.
+    </Card>
+    <Card title="Premium User Guide" icon="star" href="/guides/premium-user-guide">
+      Access specialized equipment, request multiple items, and use instructor privileges.
+    </Card>
+    <Card title="Librarian Guide" icon="book-open" href="/guides/librarian-guide">
+      Approve loan requests, process returns, manage inventory, and handle day-to-day operations.
+    </Card>
+    <Card title="Admin Guide" icon="shield-halved" href="/guides/admin-guide">
+      Manage users, configure system settings, oversee all operations, and maintain the platform.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Technical Resources
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+      Dive into the technical details of the platform for customization and integration.
+    </p>
+  </div>
+
+  <CardGroup cols={2}>
+    <Card title="Database Models" icon="database" href="/api/models/user">
+      Explore the data structure including User, Catalog, ItemInstance, Loan, and LibraryLog models.
+    </Card>
+    <Card title="Service Layer" icon="gears" href="/api/services/loan-service">
+      Understand the business logic in LoanService and InventoryService for extending functionality.
+    </Card>
+    <Card title="Route Blueprints" icon="route" href="/api/routes/auth">
+      Review the Flask blueprints for authentication, main user flows, and admin operations.
+    </Card>
+    <Card title="Configuration Guide" icon="sliders" href="/admin/configuration">
+      Configure environment variables, database settings, penalty fees, and scheduler options.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] p-8 sm:p-12 text-center">
+    <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Ready to Transform Your Library?
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
+      Start managing your library's inventory, loans, and access control with our comprehensive open-source platform.
+    </p>
+    <div className="flex flex-wrap justify-center gap-4">
+      <a
+        href="/installation"
+        className="inline-flex items-center px-8 py-3 text-base font-semibold text-white bg-[#2563eb] rounded-lg hover:bg-[#1e40af] transition-colors"
+      >
+        Install Now
+      </a>
+      <a
+        href="https://github.com/MaickFeliz/SWL"
+        className="inline-flex items-center px-8 py-3 text-base font-semibold text-gray-700 dark:text-gray-300 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-[#242838] rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2e42] transition-colors"
+      >
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</div>

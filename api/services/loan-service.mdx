@@ -1,0 +1,245 @@
+---
+title: "LoanService"
+description: "Service layer for managing loan operations and business logic"
+---
+
+The `LoanService` class handles all loan-related business logic, including validation, creation, approval, and returns.
+
+## Methods
+
+### can_request_laptop
+
+Validates whether a user can request a laptop based on their current loans.
+
+<ParamField path="user_id" type="int" required>
+  The ID of the user requesting the laptop
+</ParamField>
+
+<ResponseField name="can_request" type="tuple[bool, str]">
+  Returns a tuple containing:
+  - `bool`: True if user can request, False otherwise
+  - `str`: Message explaining the result
+</ResponseField>
+
+**Business Rules:**
+- Users cannot have more than one active computer loan
+- Checks for loans in states: 'pendiente', 'activo', 'atrasado'
+- Only applies to items in 'computo' category
+
+**Example:**
+```python
+from app.services.loan_service import LoanService
+
+can_request, message = LoanService.can_request_laptop(user_id=123)
+if not can_request:
+    flash(message, 'warning')
+```
+
+**Error Messages:**
+- `"Ya tienes un equipo pendiente, en uso o atrasado."` - User has an active computer loan
+- `"Ok"` - User can proceed with request
+
+---
+
+### can_request_accessory
+
+Validates whether a user can request an accessory based on their current loans.
+
+<ParamField path="user_id" type="int" required>
+  The ID of the user requesting the accessory
+</ParamField>
+
+<ResponseField name="can_request" type="tuple[bool, str]">
+  Returns a tuple containing:
+  - `bool`: True if user can request, False otherwise
+  - `str`: Message explaining the result
+</ResponseField>
+
+**Business Rules:**
+- Users are limited to 2 simultaneous accessories
+- Excludes 'computo' and 'libro' categories
+- Checks for loans in states: 'pendiente', 'activo', 'atrasado'
+
+**Example:**
+```python
+can_request, msg = LoanService.can_request_accessory(current_user.id)
+if not can_request:
+    flash(msg, 'warning')
+    return redirect(url_for('main.index'))
+```
+
+**Error Messages:**
+- `"Has alcanzado el límite de 2 accesorios simultáneos."` - User has reached the limit
+- `"Ok"` - User can proceed with request
+
+---
+
+### create_loan
+
+Creates a new loan record for a specific item instance.
+
+<ParamField path="user_id" type="int" required>
+  The ID of the user requesting the loan
+</ParamField>
+
+<ParamField path="instance_id" type="int" required>
+  The ID of the specific item instance being loaned
+</ParamField>
+
+<ParamField path="environment" type="str" default="None">
+  The environment where the loan will be used (e.g., 'sala', 'externo')
+</ParamField>
+
+<ParamField path="days" type="int" default="15">
+  Number of days for the loan period
+</ParamField>
+
+<ResponseField name="loan" type="Loan">
+  Returns the newly created Loan object with status 'pendiente'
+</ResponseField>
+
+**Important Notes:**
+- Does NOT commit the transaction - the controller must handle `db.session.commit()`
+- Sets initial status to 'pendiente' (pending approval)
+- Automatically calculates due_date based on days parameter
+- Creates the loan tied to a physical item instance
+
+**Example:**
+```python
+try:
+    for inst_id in reserved_ids:
+        LoanService.create_loan(
+            user_id=current_user.id,
+            instance_id=inst_id,
+            environment='externo',
+            days=15
+        )
+    db.session.commit()
+    flash('Solicitud enviada correctamente.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Error al generar el préstamo.', 'danger')
+```
+
+**Source Reference:** `app/services/loan_service.py:30`
+
+---
+
+### approve_loan
+
+Approves a pending loan and activates it.
+
+<ParamField path="loan_id" type="int" required>
+  The ID of the loan to approve
+</ParamField>
+
+<ResponseField name="result" type="tuple[bool, str]">
+  Returns a tuple containing:
+  - `bool`: True if approved successfully, False otherwise
+  - `str`: Success or error message
+</ResponseField>
+
+**Business Logic:**
+- Only loans with status 'pendiente' can be approved
+- Sets status to 'activo'
+- Records approval_date as current UTC time
+- Commits the transaction automatically
+- Item instance status should already be 'prestado' from reservation
+
+**Example:**
+```python
+success, msg = LoanService.approve_loan(loan_id=456)
+
+if success:
+    flash(msg, 'success')
+    return redirect(url_for('admin.admin_dashboard', status='activo'))
+else:
+    flash(msg, 'danger')
+    return redirect(url_for('admin.admin_dashboard', status='pendiente'))
+```
+
+**Error Messages:**
+- `"Préstamo no válido o ya procesado."` - Loan doesn't exist or is not pending
+- `"Préstamo aprobado con éxito."` - Approval successful
+
+**Source Reference:** `app/services/loan_service.py:49`
+
+---
+
+### return_loan
+
+Processes the return of a loaned item.
+
+<ParamField path="loan_id" type="int" required>
+  The ID of the loan to return
+</ParamField>
+
+<ResponseField name="result" type="tuple[bool, str]">
+  Returns a tuple containing:
+  - `bool`: True if returned successfully, False otherwise
+  - `str`: Success or error message
+</ResponseField>
+
+**Business Logic:**
+- Only loans with status 'activo' or 'atrasado' can be returned
+- Calculates and records final penalty if loan is overdue
+- Sets status to 'devuelto'
+- Records return_date as current UTC time
+- Releases the item instance back to 'disponible' status
+- Commits the transaction automatically
+
+**Example:**
+```python
+success, msg = LoanService.return_loan(loan_id=789)
+
+if success:
+    flash('Ítem devuelto y reingresado al inventario con éxito.', 'success')
+else:
+    flash(f'Error: {msg}', 'danger')
+```
+
+**Important:**
+This method automatically handles penalty calculation for overdue items using the `loan.is_overdue` property and `loan.penalty_fee` calculation.
+
+**Error Messages:**
+- `"Préstamo no válido o no está activo."` - Loan doesn't exist or wrong status
+- `"Artículo devuelto exitosamente al inventario."` - Return successful
+
+**Source Reference:** `app/services/loan_service.py:63`
+
+---
+
+### check_overdue_loans
+
+Scans for active loans past their due date and marks them as overdue.
+
+<ResponseField name="count" type="int">
+  Returns the number of loans marked as overdue
+</ResponseField>
+
+**Business Logic:**
+- Queries all loans with status 'activo' where due_date < current time
+- Updates each to status 'atrasado'
+- Commits changes if any loans were updated
+- Typically run as a scheduled background task
+
+**Example:**
+```python
+count = LoanService.check_overdue_loans()
+if count > 0:
+    current_app.logger.info(f'{count} préstamos marcados como atrasados')
+```
+
+**Usage:**
+This method is typically called by a scheduler (APScheduler) to run periodically:
+
+```python
+from app.services.loan_service import LoanService
+
+def scheduled_check():
+    with app.app_context():
+        count = LoanService.check_overdue_loans()
+        print(f"Checked overdue loans: {count} updated")
+```
+
+**Source Reference:** `app/services/loan_service.py:83`

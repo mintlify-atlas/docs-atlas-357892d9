@@ -1,0 +1,345 @@
+---
+title: 'Loan Model'
+description: 'Loan model for tracking item borrowing and returns with penalty calculation'
+---
+
+## Overview
+
+The `Loan` model represents the complete lifecycle of borrowing an item from the library. It tracks loan requests, approvals, due dates, returns, and calculates penalties for overdue items. The model includes timezone-aware properties for Colombia (CO) time conversion.
+
+## Fields
+
+<ParamField path="id" type="Integer" required>
+  Primary key identifier for the loan record
+</ParamField>
+
+<ParamField path="user_id" type="Integer" required>
+  Foreign key reference to the User who requested the loan
+</ParamField>
+
+<ParamField path="instance_id" type="Integer" required>
+  Foreign key reference to the ItemInstance being loaned
+</ParamField>
+
+<ParamField path="environment" type="String(50)">
+  The environment or location where the item will be used (e.g., 'sala de lectura', 'préstamo externo')
+</ParamField>
+
+<ParamField path="request_date" type="DateTime" default="datetime.utcnow">
+  UTC timestamp when the loan was requested. Defaults to current UTC time.
+</ParamField>
+
+<ParamField path="approval_date" type="DateTime">
+  UTC timestamp when the loan was approved by library staff. Nullable until approved.
+</ParamField>
+
+<ParamField path="due_date" type="DateTime">
+  UTC timestamp when the item is due for return. Set upon approval.
+</ParamField>
+
+<ParamField path="return_date" type="DateTime">
+  UTC timestamp when the item was actually returned. Nullable until returned.
+</ParamField>
+
+<ParamField path="status" type="String(20)" default="pendiente">
+  Current status of the loan. Possible values:
+  - `pendiente`: Awaiting approval
+  - `activo`: Approved and item loaned out
+  - `devuelto`: Item returned
+  - `rechazado`: Loan request rejected
+</ParamField>
+
+<ParamField path="observation" type="Text">
+  Additional notes or observations about the loan (e.g., item condition, special conditions)
+</ParamField>
+
+<ParamField path="final_penalty" type="Float" default="0.0">
+  The final penalty amount charged for this loan (e.g., for late returns or damage). Defaults to 0.0.
+</ParamField>
+
+## Properties
+
+### request_date_co
+
+Converts the request date from UTC to Colombia time (UTC-5).
+
+**Returns:** `datetime` or `None`
+
+```python
+loan = Loan.query.get(loan_id)
+co_time = loan.request_date_co  # Colombia timezone
+```
+
+### due_date_co
+
+Converts the due date from UTC to Colombia time (UTC-5).
+
+**Returns:** `datetime` or `None`
+
+```python
+if loan.due_date_co:
+    print(f"Due: {loan.due_date_co.strftime('%Y-%m-%d %H:%M')}")
+```
+
+### is_overdue
+
+Checks if the loan is currently overdue.
+
+**Returns:** `bool`
+
+**Logic:**
+- Returns `False` if status is 'devuelto' or 'rechazado'
+- Returns `False` if no due_date is set
+- Returns `True` if current UTC time is past the due_date
+
+```python
+if loan.is_overdue:
+    print("This loan is overdue!")
+    penalty = loan.penalty_fee
+```
+
+### penalty_fee
+
+Calculates the current penalty fee for overdue books.
+
+**Returns:** `float`
+
+**Logic:**
+- Returns `0.0` if item is not a book (category != 'libro')
+- Returns `0.0` if not overdue
+- Calculates: `days_late × PENALTY_FEE_PER_DAY` (from app config)
+- Default penalty: 5000.0 per day
+
+```python
+if loan.is_overdue:
+    current_penalty = loan.penalty_fee
+    print(f"Current penalty: ${current_penalty:,.2f}")
+```
+
+## Relationships
+
+### requester
+
+Reference to the User who requested the loan.
+
+- **Type:** Many-to-one relationship with `User` model
+- **Backref:** `loans` (accessible from User as `user.loans`)
+- **Access:** `loan.requester.full_name`
+
+### item_instance
+
+Reference to the ItemInstance being loaned.
+
+- **Type:** Many-to-one relationship with `ItemInstance` model
+- **Backref:** Defined in ItemInstance model
+- **Access:** `loan.item_instance.unique_code`
+
+## Usage Examples
+
+### Creating a Loan Request
+
+```python
+from app.models import Loan
+from app import db
+from datetime import datetime
+
+loan = Loan(
+    user_id=user.id,
+    instance_id=instance.id,
+    environment='préstamo externo',
+    status='pendiente'
+)
+db.session.add(loan)
+db.session.commit()
+```
+
+### Approving a Loan
+
+```python
+from datetime import datetime, timedelta
+
+loan = Loan.query.get(loan_id)
+
+# Approve the loan
+loan.status = 'activo'
+loan.approval_date = datetime.utcnow()
+loan.due_date = datetime.utcnow() + timedelta(days=7)  # 7-day loan period
+
+# Update instance status
+loan.item_instance.status = 'prestado'
+
+db.session.commit()
+```
+
+### Processing a Return
+
+```python
+from datetime import datetime
+
+loan = Loan.query.get(loan_id)
+
+# Calculate penalty if overdue
+if loan.is_overdue:
+    loan.final_penalty = loan.penalty_fee
+
+# Mark as returned
+loan.status = 'devuelto'
+loan.return_date = datetime.utcnow()
+
+# Update instance status
+loan.item_instance.status = 'disponible'
+
+db.session.commit()
+```
+
+### Rejecting a Loan Request
+
+```python
+loan = Loan.query.get(loan_id)
+loan.status = 'rechazado'
+loan.observation = 'User has overdue items'
+db.session.commit()
+```
+
+### Checking Overdue Loans
+
+```python
+from app.models import Loan
+
+# Get all active loans
+active_loans = Loan.query.filter_by(status='activo').all()
+
+# Filter overdue loans
+overdue_loans = [loan for loan in active_loans if loan.is_overdue]
+
+for loan in overdue_loans:
+    print(f"User: {loan.requester.full_name}")
+    print(f"Item: {loan.item_instance.catalog_item.title_or_name}")
+    print(f"Days overdue: {(datetime.utcnow() - loan.due_date).days}")
+    print(f"Penalty: ${loan.penalty_fee:,.2f}")
+    print("---")
+```
+
+### User Loan History
+
+```python
+user = User.query.get(user_id)
+
+# Get all loans for this user
+all_loans = user.loans.all()
+
+# Get active loans
+active = user.loans.filter_by(status='activo').all()
+
+# Get returned loans
+returned = user.loans.filter_by(status='devuelto').all()
+
+# Check for overdue items
+has_overdue = any(loan.is_overdue for loan in active)
+```
+
+### Loan Statistics
+
+```python
+from app.models import Loan
+from sqlalchemy import func
+
+# Count by status
+status_counts = db.session.query(
+    Loan.status,
+    func.count(Loan.id)
+).group_by(Loan.status).all()
+
+# Average loan duration
+returned_loans = Loan.query.filter_by(status='devuelto').all()
+durations = [
+    (loan.return_date - loan.approval_date).days
+    for loan in returned_loans
+    if loan.approval_date and loan.return_date
+]
+avg_duration = sum(durations) / len(durations) if durations else 0
+```
+
+### Penalty Calculation Example
+
+```python
+from flask import current_app
+from datetime import datetime
+
+loan = Loan.query.get(loan_id)
+
+if loan.is_overdue:
+    days_late = (datetime.utcnow() - loan.due_date).days
+    penalty_per_day = current_app.config.get('PENALTY_FEE_PER_DAY', 5000.0)
+    total_penalty = days_late * penalty_per_day
+    
+    print(f"Days late: {days_late}")
+    print(f"Penalty per day: ${penalty_per_day:,.2f}")
+    print(f"Total penalty: ${total_penalty:,.2f}")
+```
+
+### Displaying Loan Details
+
+```python
+loan = Loan.query.get(loan_id)
+
+details = {
+    'user': loan.requester.full_name,
+    'item': loan.item_instance.catalog_item.title_or_name,
+    'unique_code': loan.item_instance.unique_code,
+    'request_date': loan.request_date_co,
+    'due_date': loan.due_date_co,
+    'status': loan.status,
+    'is_overdue': loan.is_overdue,
+    'penalty': loan.penalty_fee if loan.is_overdue else 0,
+    'environment': loan.environment
+}
+```
+
+### Extending a Loan
+
+```python
+from datetime import timedelta
+
+loan = Loan.query.get(loan_id)
+
+if loan.status == 'activo' and not loan.is_overdue:
+    # Extend by 3 days
+    loan.due_date = loan.due_date + timedelta(days=3)
+    loan.observation = 'Loan extended by 3 days'
+    db.session.commit()
+```
+
+## Business Rules
+
+### Loan Lifecycle
+
+1. **Request**: User creates loan with status='pendiente'
+2. **Approval**: Admin sets status='activo', approval_date, and due_date
+3. **Return**: User returns item, status='devuelto', return_date set
+4. **Rejection**: Admin can set status='rechazado' at any point
+
+### Penalty Rules
+
+- Only applies to books (category='libro')
+- Calculated automatically via `penalty_fee` property
+- Based on days late and configurable daily rate
+- Final penalty stored in `final_penalty` upon return
+
+### Status Transitions
+
+```
+pendiente → activo (approved)
+pendiente → rechazado (rejected)
+activo → devuelto (returned)
+activo → rechazado (cancelled)
+```
+
+## Configuration
+
+Set penalty rate in Flask configuration:
+
+```python
+# config.py
+PENALTY_FEE_PER_DAY = 5000.0  # COP per day
+```

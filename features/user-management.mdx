@@ -1,0 +1,341 @@
+---
+title: 'User Management'
+description: 'Multi-tier user system with role-based access control'
+icon: 'users'
+---
+
+## Overview
+
+SWL Library Management System implements a comprehensive user management system with four distinct user roles, each with specific permissions and capabilities. The system handles authentication, registration, and role-based access control to ensure secure and efficient library operations.
+
+## User Roles
+
+### Admin
+Full system access with user management capabilities. Admins can:
+- Create, edit, and delete users
+- Manage all system configurations
+- Access all administrative dashboards
+- Override permissions and settings
+
+### Bibliotecario (Librarian)
+Operational staff role for day-to-day library management:
+- Approve or reject loan requests
+- Manage inventory and catalog items
+- Track overdue loans and penalties
+- Process returns and renewals
+
+### Premium
+Enhanced access for premium users:
+- Request laptops and computing equipment
+- Borrow premium-category items
+- Request up to 2 accessories simultaneously
+- Access extended loan periods
+
+### Cliente (Student/Regular User)
+Standard library member:
+- Request general category items and books
+- Borrow up to 2 accessories simultaneously
+- Limited to one computing device at a time
+- Standard loan periods apply
+
+<Note>
+  **Program Tracking**: Cliente users can specify their program/department (e.g., "Engineering", "Business") for usage analytics.
+</Note>
+
+## User Model
+
+The system uses a unified User model with role-based differentiation:
+
+```python app/models.py
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    document_id = db.Column(db.String(20), unique=True, nullable=False) 
+    full_name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20))
+    role = db.Column(db.String(20), nullable=False) 
+    program_name = db.Column(db.String(100), nullable=True)
+    password_hash = db.Column(db.String(255))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+```
+
+<Info>
+  **Document ID as Username**: Users log in using their document ID (e.g., student ID, national ID) instead of email, making the system accessible for users without email addresses.
+</Info>
+
+## Authentication Flow
+
+### User Registration
+
+New users can self-register as either Premium or Cliente:
+
+```python app/auth/routes.py
+@bp.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        # Check for existing document_id
+        if User.query.filter_by(document_id=form.document_id.data).first():
+            flash('El número de documento ya está registrado.', 'warning')
+            return render_template('auth/register.html', form=form)
+
+        user = User(
+            full_name=form.full_name.data,
+            document_id=form.document_id.data,
+            email=form.email.data,
+            phone=form.phone.data,
+            role=form.role.data
+        )
+        if form.role.data == 'cliente':
+            user.program_name = form.program_name.data
+
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+
+        flash('¡Registro exitoso!', 'success')
+        return redirect(url_for('auth.login'))
+```
+
+### Login Process
+
+Authentication uses Flask-Login with document ID-based login:
+
+```python app/auth/routes.py
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(document_id=form.document_id.data).first()
+        
+        if user is None or not user.check_password(form.password.data):
+            flash('Documento o contraseña inválidos.', 'danger')
+            return render_template('auth/login.html', form=form)
+        
+        login_user(user, remember=False)
+        
+        # Role-based redirect
+        if user.role == 'admin':
+            return redirect(url_for('admin.manage_users'))
+        elif user.role == 'bibliotecario':
+            return redirect(url_for('admin.admin_dashboard'))
+        elif user.role in ['premium', 'cliente']:
+            return redirect(url_for('main.premium_dashboard'))
+```
+
+<Warning>
+  Sessions do not persist across browser closures (`remember=False`). Users must log in each session for security.
+</Warning>
+
+## Role-Based Access Control
+
+### Permission Decorator
+
+The system uses a custom decorator to enforce role-based permissions:
+
+```python app/utils/decorators.py
+from functools import wraps
+from flask import flash, redirect, url_for
+from flask_login import current_user
+
+def role_required(*roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                flash('Debes iniciar sesión.', 'warning')
+                return redirect(url_for('auth.login'))
+            if current_user.role not in roles:
+                flash('No tienes permisos.', 'danger')
+                return redirect(url_for('main.index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+```
+
+### Usage Example
+
+```python
+@bp.route('/request/laptop', methods=['GET', 'POST'])
+@role_required('premium', 'cliente')
+def request_laptop():
+    # Only premium and cliente users can access this route
+    pass
+```
+
+## Administrative User Management
+
+### Creating Users (Admin Only)
+
+Admins can create users of any role through the admin panel:
+
+```python app/admin/routes.py
+@bp.route('/users/create', methods=['POST'])
+@role_required('admin')
+def create_user():
+    form = AdminUserForm()
+    if form.validate_on_submit():
+        user = User(
+            full_name=form.full_name.data,
+            document_id=form.document_id.data,
+            email=form.email.data,
+            phone=form.phone.data,
+            role=form.role.data,
+            program_name=form.program_name.data if form.role.data == 'cliente' else None
+        )
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('Usuario creado con éxito.', 'success')
+```
+
+### User Search and Filtering
+
+Admins can search users by name or document ID:
+
+```python app/admin/routes.py
+@bp.route('/users/search')
+@role_required('admin')
+def search_users():
+    search = request.args.get('search')
+    query = User.query
+    if search:
+        query = query.filter(
+            or_(
+                User.full_name.ilike(f'%{search}%'),
+                User.document_id.ilike(f'%{search}%'),
+            )
+        )
+    users_pagination = query.order_by(User.full_name).paginate(
+        page=page, per_page=10, error_out=False
+    )
+```
+
+### Editing and Deleting Users
+
+<Tabs>
+  <Tab title="Edit User">
+    ```python app/admin/routes.py
+    @bp.route('/users/edit/<int:id>', methods=['POST'])
+    @role_required('admin')
+    def edit_user(id):
+        user = User.query.get_or_404(id)
+        form = EditUserForm()
+
+        if form.validate_on_submit():
+            user.full_name = form.full_name.data
+            user.phone = form.phone.data
+            user.role = form.role.data
+            
+            # Optional password update
+            if form.password.data:
+                user.set_password(form.password.data)
+
+            db.session.commit()
+            flash(f'Usuario {user.full_name} actualizado.', 'success')
+    ```
+  </Tab>
+  <Tab title="Delete User">
+    ```python app/admin/routes.py
+    @bp.route('/users/delete/<int:id>', methods=['POST'])
+    @role_required('admin')
+    def delete_user(id):
+        if id == current_user.id:
+            flash('No puedes eliminar tu propio usuario.', 'danger')
+            return redirect(url_for('admin.manage_users'))
+            
+        user = User.query.get_or_404(id)
+        db.session.delete(user)
+        db.session.commit()
+        flash(f'Usuario {user.full_name} eliminado.', 'success')
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  **Self-Deletion Protection**: Admins cannot delete their own user account to prevent accidental lockouts.
+</Warning>
+
+## User Workflows
+
+### For End Users
+
+<Steps>
+  <Step title="Registration">
+    Navigate to `/register` and complete the registration form with document ID, full name, email, phone, and password.
+  </Step>
+  <Step title="Login">
+    Access `/login` and authenticate using document ID and password.
+  </Step>
+  <Step title="Dashboard Access">
+    Upon successful login, users are redirected to their role-specific dashboard.
+  </Step>
+  <Step title="Profile Management">
+    View loan history and account details at `/profile`.
+  </Step>
+</Steps>
+
+### For Administrators
+
+<Steps>
+  <Step title="Access User Management">
+    Navigate to `/admin/users` to view all registered users.
+  </Step>
+  <Step title="Create or Import Users">
+    Use the admin form to create individual users or bulk import from CSV.
+  </Step>
+  <Step title="Search and Filter">
+    Use the search functionality to find specific users by name or document ID.
+  </Step>
+  <Step title="Edit or Delete">
+    Modify user details or remove users as needed (with proper safeguards).
+  </Step>
+</Steps>
+
+## Security Features
+
+<AccordionGroup>
+  <Accordion title="Password Hashing">
+    All passwords are hashed using Werkzeug's `generate_password_hash()` with secure defaults. Plaintext passwords are never stored.
+  </Accordion>
+  
+  <Accordion title="CSRF Protection">
+    All forms are protected with Flask-WTF CSRF tokens, preventing cross-site request forgery attacks.
+  </Accordion>
+  
+  <Accordion title="Unique Constraints">
+    Both `document_id` and `email` fields have unique database constraints to prevent duplicate accounts.
+  </Accordion>
+  
+  <Accordion title="Session Management">
+    Flask-Login manages user sessions with automatic timeout and logout functionality.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Strong Document IDs" icon="id-card">
+    Ensure document IDs are properly formatted and validated before registration.
+  </Card>
+  <Card title="Regular Audits" icon="clipboard-check">
+    Periodically review user accounts to remove inactive or duplicate entries.
+  </Card>
+  <Card title="Role Assignment" icon="user-tag">
+    Carefully assign roles based on actual user privileges to maintain security.
+  </Card>
+  <Card title="Password Policies" icon="lock">
+    Encourage users to set strong passwords through validation rules.
+  </Card>
+</CardGroup>
+
+## Related Features
+
+- [Loan System](/features/loan-system) - How different user roles interact with the loan workflow
+- [Fast Loan Kiosk](/features/fast-loan-kiosk) - Document ID lookup for quick checkouts
+- [Visit Tracking](/features/visit-tracking) - Logging user visits by document ID

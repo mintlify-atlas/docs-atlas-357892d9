@@ -1,0 +1,341 @@
+---
+title: 'Premium User Guide'
+description: 'Complete guide for premium users to access specialized equipment and enhanced features'
+icon: 'crown'
+---
+
+## Welcome, Premium User!
+
+As a premium user, you have access to enhanced features and specialized equipment in the SWL Library Management System. This guide covers your exclusive privileges and how to maximize them.
+
+## Premium User Privileges
+
+Premium users enjoy several advantages over standard student accounts:
+
+<CardGroup cols={2}>
+  <Card title="Specialized Equipment" icon="laptop">
+    Access to advanced computing equipment and specialized accessories restricted from general users
+  </Card>
+  
+  <Card title="Multiple Laptops" icon="layer-group">
+    Request multiple laptop units simultaneously for group projects or special needs
+  </Card>
+  
+  <Card title="Higher Limits" icon="gauge-high">
+    Increased borrowing limits for accessories and equipment
+  </Card>
+  
+  <Card title="Priority Access" icon="star">
+    Access to exclusive catalog items in the 'computo' category
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+### Account Setup
+
+Premium accounts are created by system administrators. If you need premium access:
+
+<Steps>
+  <Step title="Request Premium Status">
+    Contact a system administrator explaining your need for premium access
+  </Step>
+  
+  <Step title="Account Upgrade">
+    Administrator will upgrade your existing account or create a new premium account
+  </Step>
+  
+  <Step title="Login">
+    Use your document ID and password at `/auth/login`
+  </Step>
+  
+  <Step title="Access Premium Dashboard">
+    You'll be redirected to `/dashboard` with premium features enabled
+  </Step>
+</Steps>
+
+## Requesting Specialized Equipment
+
+### Requesting Laptops (Enhanced)
+
+Premium users can request multiple laptop units simultaneously:
+
+<Steps>
+  <Step title="Navigate to Laptop Request">
+    Go to `/request/laptop` from your dashboard
+  </Step>
+  
+  <Step title="Select Computing Equipment">
+    Browse the full catalog including specialized computing equipment
+  </Step>
+  
+  <Step title="Specify Quantity">
+    **Premium feature**: Enter the number of units needed (unlike students who are limited to 1)
+  </Step>
+  
+  <Step title="Choose Environment">
+    Select usage location:
+    - **Interno**: Library use only
+    - **Externo**: External/take-home use
+  </Step>
+  
+  <Step title="Submit Request">
+    Send for librarian approval
+  </Step>
+</Steps>
+
+<Info>
+**Multiple Unit Requests:**
+When requesting multiple laptops, the system reserves all units simultaneously. If insufficient units are available, the entire request will fail.
+</Info>
+
+### Accessing Specialized Accessories
+
+Premium users have access to specialized computing accessories denied to regular students:
+
+<Steps>
+  <Step title="Go to Accessory Request">
+    Navigate to `/request/accessory`
+  </Step>
+  
+  <Step title="View Full Catalog">
+    You'll see all available accessories including:
+    - Specialized computing peripherals
+    - Advanced technical equipment
+    - General accessories
+  </Step>
+  
+  <Step title="Select Items and Quantity">
+    Choose your items and specify quantity needed
+  </Step>
+  
+  <Step title="Submit">
+    Request will go to librarian for approval
+  </Step>
+</Steps>
+
+<Warning>
+Premium users still have a limit of **2 simultaneous accessory requests**. Plan your requests accordingly.
+</Warning>
+
+## Group Loan Management
+
+### Managing Multiple Items
+
+Premium users often manage multiple active loans simultaneously:
+
+**Dashboard Organization:**
+- All loans are displayed in chronological order (newest first)
+- Each loan shows:
+  - Item type and name
+  - Request date and due date
+  - Current status
+  - Environment (interno/externo)
+  - Penalty amount (if applicable)
+
+**Status Types:**
+- **Pendiente**: Awaiting approval
+- **Activo**: Active loan in your possession
+- **Atrasado**: Overdue - immediate action required
+- **Devuelto**: Successfully returned
+- **Rechazado**: Request denied
+
+### Group Projects and Multiple Laptops
+
+When requesting equipment for group work:
+
+<Steps>
+  <Step title="Calculate Needs">
+    Determine exactly how many units your team requires
+  </Step>
+  
+  <Step title="Check Availability">
+    Verify sufficient units are available in the catalog before requesting
+  </Step>
+  
+  <Step title="Submit Single Request">
+    Request all units in one transaction - they'll be reserved together
+  </Step>
+  
+  <Step title="Coordinate Pickup">
+    After approval, coordinate with your team to pick up all units from the library desk
+  </Step>
+  
+  <Step title="Track Due Dates">
+    All units from the same request share the same due date - plan group returns accordingly
+  </Step>
+</Steps>
+
+<Tip>
+**Pro Tip:** For large group projects, request equipment 2-3 days in advance to ensure approval and availability.
+</Tip>
+
+## Book Requests
+
+Premium users request books the same way as students:
+
+<Steps>
+  <Step title="Browse Books">
+    Navigate to `/request/book`
+  </Step>
+  
+  <Step title="Select Book">
+    Choose from available titles in the catalog
+  </Step>
+  
+  <Step title="Submit and Pickup">
+    After approval, collect the book from the library desk
+  </Step>
+</Steps>
+
+<Note>
+Book loans have a **15-day due date** and are subject to daily penalties if returned late (default: $5,000 COP/day).
+</Note>
+
+## Understanding Your Dashboard
+
+### Loan Overview
+
+Your premium dashboard at `/dashboard` provides:
+
+- **Complete loan history**: All past and current requests
+- **Status filtering**: Quickly find pending, active, or overdue items
+- **Due date tracking**: Visual indicators for upcoming due dates
+- **Penalty tracking**: Real-time calculation of overdue fees for books
+
+### Monitoring Active Loans
+
+<AccordionGroup>
+  <Accordion title="View Active Items">
+    Filter your dashboard to see only 'activo' status loans - these are items currently in your possession.
+  </Accordion>
+  
+  <Accordion title="Check Due Dates">
+    Due dates are displayed in Colombia time (UTC-5). Items approaching due dates should be prioritized for return.
+  </Accordion>
+  
+  <Accordion title="Track Penalties">
+    For book loans, the penalty amount updates daily if overdue. Return books promptly to minimize fees.
+  </Accordion>
+  
+  <Accordion title="Review Observations">
+    If a request is rejected, check the observation field for the librarian's reason.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices for Premium Users
+
+<AccordionGroup>
+  <Accordion title="Batch Your Requests">
+    When requesting multiple units, submit them in a single request rather than multiple separate requests for better tracking.
+  </Accordion>
+  
+  <Accordion title="Communicate Project Timelines">
+    If you need equipment for extended periods, communicate with the librarian before the due date to request extensions.
+  </Accordion>
+  
+  <Accordion title="Return as a Batch">
+    When returning multiple units from the same request, return them all together to simplify processing.
+  </Accordion>
+  
+  <Accordion title="Monitor Specialized Equipment">
+    Computing equipment often has limited availability. Request as soon as you know you'll need it.
+  </Accordion>
+  
+  <Accordion title="Use External Wisely">
+    When requesting 'externo' use, ensure you can safely transport and secure the equipment off-campus.
+  </Accordion>
+  
+  <Accordion title="Track Team Responsibility">
+    When borrowing for groups, the premium user who requested the items is ultimately responsible for their return.
+  </Accordion>
+</AccordionGroup>
+
+## Fast Loan Feature Access
+
+Premium users may be granted access to fast loan features:
+
+- When using fast loan (`/fast_loan`), premium users see specialized equipment catalogs
+- General category items are excluded from premium fast loans
+- Same quantity and environment rules apply
+
+<Info>
+Fast loan is typically used by librarians for in-person requests, but premium users may have access for special scenarios.
+</Info>
+
+## Profile Management
+
+Access your profile at `/profile` to:
+
+- View all personal information
+- Review complete loan history across all requests
+- Check premium status and privileges
+- See contact information
+
+<Warning>
+To modify profile details (email, phone, role), contact a system administrator. Users cannot self-edit these fields.
+</Warning>
+
+## Upgrading to Premium: What Changes?
+
+When upgrading from student to premium:
+
+<Steps>
+  <Step title="Role Change">
+    Administrator updates your role from 'cliente' to 'premium'
+  </Step>
+  
+  <Step title="Enhanced Access">
+    Immediately gain access to:
+    - Specialized computing equipment
+    - Multi-unit laptop requests
+    - Full accessory catalog
+  </Step>
+  
+  <Step title="Same Limits Apply">
+    Note that some limits remain:
+    - Cannot have duplicate active laptop requests
+    - Maximum 2 simultaneous accessories (but from full catalog)
+    - Standard due dates (15 days)
+  </Step>
+</Steps>
+
+## Frequently Asked Questions
+
+<AccordionGroup>
+  <Accordion title="Can I request more than 2 accessories?">
+    No, the system enforces a maximum of 2 simultaneous accessory requests for all users, including premium accounts. However, premium users can access specialized accessories unavailable to students.
+  </Accordion>
+  
+  <Accordion title="What's the maximum number of laptops I can request?">
+    While premium users can request multiple laptop units in a single request, you cannot have overlapping active laptop requests. Quantity is limited by availability.
+  </Accordion>
+  
+  <Accordion title="Why doesn't the fast loan show all items?">
+    Premium users in fast loan see only specialized/computing equipment. General items are filtered out to streamline the interface.
+  </Accordion>
+  
+  <Accordion title="Can I transfer items to another user?">
+    No, loans are tied to the requesting user. The borrower must return items personally to the library desk.
+  </Accordion>
+  
+  <Accordion title="Do premium users get longer loan periods?">
+    No, all users have the same 15-day standard loan period. Extensions must be requested from the librarian before the due date.
+  </Accordion>
+</AccordionGroup>
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Technical Support" icon="gear">
+    Contact system administrators for account issues or technical problems
+  </Card>
+  
+  <Card title="Loan Support" icon="book-open">
+    Visit the library desk or contact librarians for request approvals and extensions
+  </Card>
+</CardGroup>
+
+<Check>
+You're ready to leverage all premium features in the SWL Library Management System!
+</Check>

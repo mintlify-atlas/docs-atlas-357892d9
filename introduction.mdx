@@ -1,0 +1,217 @@
+---
+title: Introduction
+description: Welcome to SWL Library Management System - An open-source SaaS platform for managing library resources, equipment loans, and access control
+---
+
+# Welcome to SWL Library Management System
+
+SWL is a comprehensive open-source library management platform designed for educational institutions and enterprises that need efficient resource control, equipment loans, and access tracking.
+
+Built with Flask and modern web technologies, SWL automates the complete workflow of modern libraries and resource centers, handling everything from user registration to equipment tracking and penalty management.
+
+## Who is SWL for?
+
+<CardGroup cols={2}>
+  <Card title="Educational Institutions" icon="school">
+    Schools, universities, and training centers managing student equipment loans, library materials, and facility access
+  </Card>
+  <Card title="Corporate Resource Centers" icon="building">
+    Companies managing shared equipment, technical resources, and workspace access for employees
+  </Card>
+  <Card title="Makerspace & Labs" icon="flask">
+    Technical facilities managing specialized equipment like LEGO Education kits, audiovisual gear, and tools
+  </Card>
+  <Card title="Library Systems" icon="book">
+    Traditional and modern libraries seeking digital transformation of their operations
+  </Card>
+</CardGroup>
+
+## Key Capabilities
+
+### Multi-Tier User Management
+
+SWL supports four distinct user roles with different permission levels:
+
+- **Admin (SuperUser)**: Full system control including user management, inventory audits, and system configuration
+- **Bibliotecario (Staff)**: Loan approval, returns processing, and operational management
+- **Premium Users**: Access to specialized equipment (audiovisual, technical tools) with extended loan privileges
+- **Cliente (Regular Users)**: Standard library access with configurable loan limits
+
+### Intelligent Loan Engine
+
+The system provides real-time validation and automated workflows:
+
+- **Real-time stock validation** prevents overbooking
+- **Duplicate prevention** ensures users don't request the same item twice
+- **Automated penalty calculation** for overdue items
+- **Fast Loan Kiosk Mode** for quick self-service without login friction
+
+### Dynamic Inventory Management
+
+<Note>
+SWL uses a two-tier inventory system: **Catalog items** (generic items like "Mouse USB") and **Item Instances** (physical units with unique serial codes like "MOU-1-001").
+</Note>
+
+Features include:
+
+- Flexible categorization (General vs. Premium/Specialized)
+- Serial number tracking for each physical unit
+- Status management (available, on loan, maintenance, lost)
+- Condition tracking and audit trails
+
+### Activity & Access Logging
+
+Track facility usage with:
+
+- Visit registration and statistics
+- Usage analytics by user type
+- Historical activity reports
+
+## Architecture Overview
+
+SWL follows Flask's modular blueprint pattern for clean separation of concerns:
+
+```python
+app/
+├── __init__.py           # Application factory & extensions
+├── admin/                # Admin dashboard & management
+│   ├── __init__.py
+│   └── routes.py        # User mgmt, inventory, approvals
+├── auth/                 # Authentication system
+│   ├── __init__.py
+│   └── routes.py        # Login, registration, logout
+├── main/                 # User-facing features
+│   ├── __init__.py
+│   └── routes.py        # Dashboards, kiosk mode
+├── services/            # Business logic layer
+│   ├── inventory_service.py
+│   └── loan_service.py
+├── utils/               # Utilities & decorators
+│   └── decorators.py   # Role-based access control
+├── models.py            # SQLAlchemy models
+└── forms.py             # WTForms definitions
+```
+
+### Technology Stack
+
+<CodeGroup>
+```python Backend (Flask)
+Flask==3.1.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-Migrate==4.1.0
+Flask-APScheduler==1.13.1
+```
+
+```python Database & ORM
+SQLAlchemy==2.0.47
+alembic==1.18.4
+# SQLite (development) or PostgreSQL (production)
+```
+
+```python Forms & Validation
+Flask-WTF==1.2.2
+WTForms==3.2.1
+email-validator==2.3.0
+```
+</CodeGroup>
+
+### Database Schema
+
+The system uses five core models:
+
+1. **User**: Multi-role user accounts with authentication
+2. **Catalog**: Generic item definitions (e.g., "VideoBeam")
+3. **ItemInstance**: Physical units with unique codes and status
+4. **Loan**: Complete loan lifecycle tracking
+5. **LibraryLog**: Facility access and visit records
+
+## Key Features at a Glance
+
+<AccordionGroup>
+  <Accordion title="Automated Scheduled Tasks">
+    SWL uses Flask-APScheduler to run daily tasks:
+    
+    - **Overdue loan checks** run at 00:01 AM daily
+    - **Automatic penalty calculation** based on configurable rates
+    - **Status updates** for late returns
+    
+    Configure in `config.py`:
+    ```python
+    PENALTY_FEE_PER_DAY = 5000.0  # Configurable late fee
+    SCHEDULER_TIMEZONE = "America/Bogota"
+    ```
+  </Accordion>
+  
+  <Accordion title="Fast Loan Kiosk Mode">
+    Self-service interface optimized for high-traffic scenarios:
+    
+    - No login required - search by document ID
+    - Quick item selection and checkout
+    - Immediate loan creation
+    - Perfect for library entrances and service desks
+  </Accordion>
+  
+  <Accordion title="Role-Based Access Control">
+    Granular permissions using custom decorators:
+    
+    ```python
+    from app.utils.decorators import role_required
+    
+    @bp.route('/users')
+    @role_required('admin')
+    def manage_users():
+        # Only admins can access
+    ```
+  </Accordion>
+  
+  <Accordion title="Comprehensive Logging">
+    Production-ready logging with rotation:
+    
+    - Rotating file handler (1MB max, 3 backups)
+    - Structured log messages with timestamps
+    - Configurable log levels
+    - Audit trail for all operations
+  </Accordion>
+</AccordionGroup>
+
+## Database Flexibility
+
+<Tip>
+SWL automatically uses **PostgreSQL** in production (via `DATABASE_URL` environment variable) and falls back to **SQLite** for development. No code changes needed!
+</Tip>
+
+From `config.py`:
+```python
+SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+    'sqlite:///' + os.path.join(basedir, 'instance', 'app.db')
+```
+
+## Security Features
+
+- **Password hashing** with Werkzeug's PBKDF2
+- **Session management** with configurable timeouts (30 minutes default)
+- **CSRF protection** via Flask-WTF
+- **Secret key** configuration for production deployments
+- **Role-based access control** on all sensitive endpoints
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get SWL running in 5 minutes
+  </Card>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed setup instructions
+  </Card>
+  <Card title="Configuration" icon="gear" href="/admin/configuration">
+    Environment and deployment config
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/models/user">
+    Explore the codebase
+  </Card>
+</CardGroup>
+
+<Note>
+SWL is designed for self-hosting. You maintain full control of your data and can customize the system to your institution's specific needs.
+</Note>

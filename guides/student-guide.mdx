@@ -1,0 +1,263 @@
+---
+title: 'Student Guide'
+description: 'Complete guide for student users (cliente role) to use the SWL Library Management System'
+icon: 'graduation-cap'
+---
+
+## Welcome, Student!
+
+This guide will help you navigate the SWL Library Management System as a student user. Learn how to request equipment, borrow books, and manage your loans effectively.
+
+## Getting Started
+
+### Creating Your Account
+
+<Steps>
+  <Step title="Navigate to Registration">
+    Go to the registration page at `/auth/register`
+  </Step>
+  
+  <Step title="Fill in Your Information">
+    - Full name
+    - Document ID (this will be your username)
+    - Email address
+    - Phone number
+    - Select role: **Cliente** (Student)
+    - Enter your program name (e.g., "Computer Science", "Engineering")
+  </Step>
+  
+  <Step title="Create Your Password">
+    Choose a secure password and confirm it
+  </Step>
+  
+  <Step title="Submit and Login">
+    After successful registration, you'll be redirected to the login page
+  </Step>
+</Steps>
+
+### Logging In
+
+<Steps>
+  <Step title="Access the Login Page">
+    Navigate to `/auth/login`
+  </Step>
+  
+  <Step title="Enter Credentials">
+    - Document ID (the one you registered with)
+    - Password
+  </Step>
+  
+  <Step title="Access Your Dashboard">
+    After login, you'll be redirected to your personal dashboard at `/dashboard`
+  </Step>
+</Steps>
+
+<Tip>
+Bookmark your dashboard page for quick access to all your loans and requests!
+</Tip>
+
+## Requesting Equipment
+
+### Requesting a Laptop
+
+<Steps>
+  <Step title="Navigate to Laptop Request">
+    From your dashboard, click on "Request Laptop" or go to `/request/laptop`
+  </Step>
+  
+  <Step title="Select a Laptop">
+    Choose from the available laptops in the catalog. You'll see:
+    - Laptop model and brand
+    - Number of units available
+  </Step>
+  
+  <Step title="Choose Environment">
+    Select where you'll use the laptop:
+    - **Interno**: Inside the library
+    - **Externo**: Outside the library (take home)
+  </Step>
+  
+  <Step title="Submit Request">
+    Click submit to send your request to the librarian for approval
+  </Step>
+</Steps>
+
+<Warning>
+**Important Restrictions:**
+- Students can only request **one laptop at a time**
+- You cannot request another laptop while you have one pending, active, or overdue
+- Wait for approval before picking up your equipment
+</Warning>
+
+### Requesting Accessories
+
+As a student, you can request general accessories like headphones, chargers, and other non-computing equipment.
+
+<Steps>
+  <Step title="Go to Accessory Request">
+    Navigate to `/request/accessory` from your dashboard
+  </Step>
+  
+  <Step title="Select Accessory">
+    Choose from available general accessories (computing equipment is reserved for premium users)
+  </Step>
+  
+  <Step title="Specify Quantity">
+    Enter how many units you need (up to your limit)
+  </Step>
+  
+  <Step title="Submit">
+    Send your request for librarian approval
+  </Step>
+</Steps>
+
+<Info>
+Students can request up to **2 accessories simultaneously**. This limit helps ensure fair access for all users.
+</Info>
+
+## Requesting Books
+
+<Steps>
+  <Step title="Browse Book Catalog">
+    Navigate to `/request/book` to see available books
+  </Step>
+  
+  <Step title="Select a Book">
+    Choose from the catalog showing:
+    - Book title
+    - Author
+    - Available copies
+  </Step>
+  
+  <Step title="Submit Request">
+    Click to request the book
+  </Step>
+  
+  <Step title="Visit the Library Desk">
+    After your request is approved, go to the library desk to pick up your book
+  </Step>
+</Steps>
+
+<Note>
+Book loans are automatically set with a **15-day due date** from approval. Plan accordingly!
+</Note>
+
+## Managing Your Loans
+
+### Checking Loan Status
+
+Your dashboard (`/dashboard`) displays all your loans with the following statuses:
+
+- **Pendiente** (Pending): Awaiting librarian approval
+- **Activo** (Active): Approved and in your possession
+- **Atrasado** (Overdue): Past the due date - return immediately!
+- **Devuelto** (Returned): Successfully returned
+- **Rechazado** (Rejected): Request was denied
+
+### Understanding Due Dates
+
+Each loan has a due date displayed in your dashboard:
+
+- **Equipment loans**: Typically 15 days from approval
+- **Book loans**: 15 days from approval
+
+The system automatically converts UTC times to Colombia time (UTC-5) for display.
+
+<Warning>
+**Late Returns:**
+Returning items late may result in penalties. Books accrue a daily fine after the due date.
+</Warning>
+
+### Penalties for Late Books
+
+The system automatically calculates penalties for overdue books:
+
+- Penalty starts accumulating the day after the due date
+- Default rate: $5,000 COP per day
+- Penalty is frozen and recorded when you return the book
+- No penalties for non-book items
+
+<Tip>
+Check your dashboard regularly to avoid late fees. Set reminders a day before your due dates!
+</Tip>
+
+## Profile Management
+
+Access your profile at `/profile` to:
+
+- View your personal information
+- See your complete loan history
+- Check your program affiliation
+- Review contact details
+
+<Info>
+To update your profile information (email, phone, program), contact a system administrator.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Plan Ahead">
+    Request equipment a day before you need it to allow time for librarian approval during business hours.
+  </Accordion>
+  
+  <Accordion title="Return on Time">
+    Set calendar reminders 1-2 days before due dates. Early returns are always appreciated!
+  </Accordion>
+  
+  <Accordion title="Check Equipment Condition">
+    When picking up laptops or accessories, verify the condition with the librarian. Report any issues immediately.
+  </Accordion>
+  
+  <Accordion title="Understand Your Limits">
+    Remember your restrictions:
+    - 1 laptop maximum
+    - 2 accessories maximum
+    - No access to specialized computing equipment
+  </Accordion>
+  
+  <Accordion title="Keep Contact Info Updated">
+    Ensure your email and phone are current so librarians can reach you about your requests.
+  </Accordion>
+</AccordionGroup>
+
+## Frequently Asked Questions
+
+<AccordionGroup>
+  <Accordion title="Why was my laptop request rejected?">
+    Common reasons:
+    - You already have an active laptop loan
+    - The item became unavailable
+    - You have overdue items
+    
+    Check the observation field in your dashboard for the specific reason.
+  </Accordion>
+  
+  <Accordion title="Can I request multiple books at once?">
+    The current system processes one book request at a time. Submit separate requests for multiple books.
+  </Accordion>
+  
+  <Accordion title="What if I need the item longer than 15 days?">
+    Contact the library desk before your due date to request an extension. Extensions are granted case-by-case.
+  </Accordion>
+  
+  <Accordion title="How do I return items?">
+    Bring items to the library desk during operating hours. The librarian will process the return in the system and clear your loan.
+  </Accordion>
+  
+  <Accordion title="Can I upgrade to a premium account?">
+    Yes! Contact a system administrator to upgrade your account to premium status for access to specialized equipment and higher limits.
+  </Accordion>
+</AccordionGroup>
+
+## Need Help?
+
+If you encounter issues:
+
+1. **Technical Problems**: Contact the system administrator
+2. **Loan Questions**: Visit the library desk or contact the librarian
+3. **Account Issues**: Reach out to an administrator for profile updates
+
+<Check>
+You're now ready to make the most of the SWL Library Management System as a student user!
+</Check>

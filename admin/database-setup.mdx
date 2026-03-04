@@ -1,0 +1,451 @@
+---
+title: Database Setup
+description: Initialize, configure, and maintain the SWL Library Management System database
+---
+
+The SWL Library Management System uses SQLAlchemy ORM with support for both SQLite (development) and PostgreSQL (production) databases.
+
+## Database Options
+
+### SQLite (Default)
+
+**Best for**: Development, testing, single-user scenarios
+
+**Configuration**:
+```bash
+# Automatic if DATABASE_URL not set
+# Creates: instance/app.db
+```
+
+**Location**: `config.py:10-11`
+
+**Advantages**:
+- Zero configuration
+- File-based (no server required)
+- Perfect for development
+
+**Limitations**:
+- Limited concurrency
+- Not suitable for production with multiple users
+- No network access
+
+### PostgreSQL (Recommended for Production)
+
+**Best for**: Production deployments, multi-user environments
+
+**Configuration**:
+```bash
+DATABASE_URL=postgresql://username:password@localhost/library_db
+```
+
+**Advantages**:
+- Excellent concurrency handling
+- ACID compliance
+- Better performance under load
+- Network-accessible
+- Robust backup/recovery
+
+**Requirements**:
+- PostgreSQL server 12+
+- psycopg2 driver
+
+## Initial Database Setup
+
+### Automatic Initialization
+
+The database is automatically initialized when you run the application for the first time:
+
+```bash
+python run.py
+```
+
+**What happens** (`run.py:7-8`):
+
+1. Creates all database tables using `db.create_all()`
+2. Creates default admin account
+3. Seeds initial inventory items
+
+### Default Admin Account
+
+A superuser account is automatically created on first run (`run.py:10-21`):
+
+```python
+Document ID: 1000000000
+Full Name: Administrador Principal
+Role: admin
+Phone: 0000000000
+Email: admin@biblioteca.com
+Password: admin123
+```
+
+<Warning>
+  **CRITICAL SECURITY ISSUE**: The default admin password is `admin123`. You **MUST** change this immediately after first login. This is a well-known default credential.
+</Warning>
+
+**Changing Default Password**:
+
+1. Log in with default credentials
+2. Navigate to admin profile settings
+3. Update to a strong, unique password
+4. Log out and log back in with new password
+
+### Initial Inventory Data
+
+The system seeds 6 default inventory items (`run.py:23-52`):
+
+| Item | Quantity | Category |
+|------|----------|----------|
+| Mouse USB | 50 | general |
+| VideoBeam | 10 | premium |
+| Cable HDMI | 20 | premium |
+| Televisor | 5 | premium |
+| Regleta/Extension | 15 | premium |
+| Kit LEGO Education | 8 | premium |
+
+Each item receives:
+- A catalog entry
+- Individual instances with unique codes (format: `XXX-{catalog_id}-{number}`)
+- Status: `disponible`
+
+## Database Schema
+
+The system uses four main models (`app/models.py`):
+
+### User Table
+
+```python
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    document_id = db.Column(db.String(20), unique=True, nullable=False)
+    full_name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20))
+    role = db.Column(db.String(20), nullable=False)
+    program_name = db.Column(db.String(100), nullable=True)
+    password_hash = db.Column(db.String(255))
+```
+
+**Location**: `app/models.py:12-20`
+
+### Catalog Table
+
+```python
+class Catalog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title_or_name = db.Column(db.String(150), nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    author_or_brand = db.Column(db.String(100), nullable=True)
+```
+
+**Location**: `app/models.py:29-33`
+
+### ItemInstance Table
+
+```python
+class ItemInstance(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    catalog_id = db.Column(db.Integer, db.ForeignKey('catalog.id'))
+    unique_code = db.Column(db.String(50), unique=True, nullable=False)
+    status = db.Column(db.String(20), default='disponible')
+    condition = db.Column(db.String(100), nullable=True)
+```
+
+**Location**: `app/models.py:38-43`
+
+**Status Values**: `disponible`, `prestado`, `mantenimiento`, `perdido`
+
+### Loan Table
+
+```python
+class Loan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    instance_id = db.Column(db.Integer, db.ForeignKey('item_instance.id'))
+    environment = db.Column(db.String(50), nullable=True)
+    request_date = db.Column(db.DateTime, default=datetime.utcnow)
+    approval_date = db.Column(db.DateTime, nullable=True)
+    due_date = db.Column(db.DateTime, nullable=True)
+    return_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default='pendiente')
+    observation = db.Column(db.Text, nullable=True)
+    final_penalty = db.Column(db.Float, default=0.0)
+```
+
+**Location**: `app/models.py:48-61`
+
+**Status Values**: `pendiente`, `aprobado`, `devuelto`, `rechazado`
+
+### LibraryLog Table
+
+```python
+class LibraryLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    visitor_name = db.Column(db.String(100), nullable=False)
+    visitor_id = db.Column(db.String(20), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    entry_time = db.Column(db.DateTime, default=datetime.utcnow)
+    activity = db.Column(db.String(50), nullable=False)
+```
+
+**Location**: `app/models.py:94-100`
+
+## Database Migrations
+
+The system uses Flask-Migrate (Alembic) for database migrations.
+
+### Migration Setup
+
+Flask-Migrate is initialized in `app/__init__.py:24`:
+
+```python
+migrate = Migrate()
+migrate.init_app(app, db)
+```
+
+**Migration Directory**: `migrations/`
+
+### Creating Migrations
+
+After modifying models, create a new migration:
+
+```bash
+# Generate migration automatically
+flask db migrate -m "Description of changes"
+
+# Example
+flask db migrate -m "Add email notification field to User"
+```
+
+### Applying Migrations
+
+Apply pending migrations to the database:
+
+```bash
+flask db upgrade
+```
+
+### Rolling Back Migrations
+
+Revert the last migration:
+
+```bash
+flask db downgrade
+```
+
+### Migration Best Practices
+
+1. **Review Generated Migrations**
+   - Always inspect auto-generated migration files
+   - Alembic may not detect all changes correctly
+   - Add data migrations manually if needed
+
+2. **Test Migrations**
+   - Test in development before production
+   - Verify both upgrade and downgrade paths
+   - Check for data loss scenarios
+
+3. **Version Control**
+   - Commit migration files to git
+   - Include descriptive migration messages
+   - Never edit applied migrations
+
+## PostgreSQL Production Setup
+
+### 1. Install PostgreSQL
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+# Start PostgreSQL service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+### 2. Create Database and User
+
+```bash
+# Switch to postgres user
+sudo -u postgres psql
+
+# Create database
+CREATE DATABASE library_production;
+
+# Create user with password
+CREATE USER library_user WITH PASSWORD 'secure_password_here';
+
+# Grant privileges
+GRANT ALL PRIVILEGES ON DATABASE library_production TO library_user;
+
+# Exit psql
+\q
+```
+
+### 3. Install Python Driver
+
+```bash
+pip install psycopg2-binary
+```
+
+### 4. Configure Environment
+
+```bash
+# .env file
+DATABASE_URL=postgresql://library_user:secure_password_here@localhost/library_production
+```
+
+### 5. Initialize Database
+
+```bash
+# Run migrations
+flask db upgrade
+
+# Or run the application (will create tables)
+python run.py
+```
+
+## Backup and Restore
+
+### SQLite Backup
+
+**Backup**:
+```bash
+# Simple file copy
+cp instance/app.db instance/app.db.backup.$(date +%Y%m%d)
+
+# Or using SQLite CLI
+sqlite3 instance/app.db ".backup instance/app.db.backup"
+```
+
+**Restore**:
+```bash
+# Copy backup over current database
+cp instance/app.db.backup.20260304 instance/app.db
+```
+
+### PostgreSQL Backup
+
+**Backup**:
+```bash
+# Full database dump
+pg_dump -U library_user -h localhost library_production > backup_$(date +%Y%m%d).sql
+
+# Compressed backup
+pg_dump -U library_user -h localhost library_production | gzip > backup_$(date +%Y%m%d).sql.gz
+```
+
+**Restore**:
+```bash
+# From plain SQL dump
+psql -U library_user -h localhost library_production < backup_20260304.sql
+
+# From compressed backup
+gunzip -c backup_20260304.sql.gz | psql -U library_user -h localhost library_production
+```
+
+### Automated Backup Script
+
+```bash
+#!/bin/bash
+# backup_db.sh
+
+BACKUP_DIR="/var/backups/library"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_NAME="library_production"
+DB_USER="library_user"
+
+mkdir -p $BACKUP_DIR
+
+# Create backup
+pg_dump -U $DB_USER $DB_NAME | gzip > $BACKUP_DIR/backup_$DATE.sql.gz
+
+# Keep only last 7 days
+find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +7 -delete
+
+echo "Backup completed: backup_$DATE.sql.gz"
+```
+
+**Schedule with cron**:
+```bash
+# Run daily at 2 AM
+0 2 * * * /path/to/backup_db.sh
+```
+
+## Database Maintenance
+
+### Checking Database Size
+
+**SQLite**:
+```bash
+du -h instance/app.db
+```
+
+**PostgreSQL**:
+```sql
+SELECT pg_size_pretty(pg_database_size('library_production'));
+```
+
+### Cleaning Up Old Data
+
+```python
+# Example: Delete old library logs
+from app import db
+from app.models import LibraryLog
+from datetime import datetime, timedelta
+
+cutoff_date = datetime.utcnow() - timedelta(days=365)
+LibraryLog.query.filter(LibraryLog.entry_time < cutoff_date).delete()
+db.session.commit()
+```
+
+### Optimizing PostgreSQL
+
+```sql
+-- Analyze tables for query optimization
+ANALYZE;
+
+-- Vacuum to reclaim storage
+VACUUM;
+
+-- Full vacuum (requires exclusive lock)
+VACUUM FULL;
+```
+
+## Troubleshooting
+
+### Database Connection Errors
+
+**Issue**: `psycopg2.OperationalError: could not connect to server`
+
+**Solutions**:
+1. Verify PostgreSQL is running: `sudo systemctl status postgresql`
+2. Check connection string format
+3. Verify user credentials
+4. Check `pg_hba.conf` authentication settings
+
+### Migration Conflicts
+
+**Issue**: `sqlalchemy.exc.OperationalError: table already exists`
+
+**Solutions**:
+1. Check if migrations are in sync: `flask db current`
+2. Stamp existing database: `flask db stamp head`
+3. Create new migration: `flask db migrate`
+
+### Permission Errors (PostgreSQL)
+
+**Issue**: `permission denied for table`
+
+**Solution**:
+```sql
+-- Grant all privileges on all tables
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO library_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO library_user;
+```
+
+## See Also
+
+- [Configuration](/admin/configuration) - Database configuration options
+- [Deployment](/admin/deployment) - Production database deployment
+- [User Roles](/admin/user-roles) - User management and roles

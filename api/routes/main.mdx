@@ -1,0 +1,416 @@
+---
+title: "Main Routes"
+description: "Primary user-facing routes for loans, visits, and dashboard"
+---
+
+Main routes handle core user functionality including loan requests, visit registration, and user dashboards.
+
+## Public Routes
+
+### GET/POST /fast_loan
+
+Fast loan interface for librarians to quickly register loans for any user.
+
+**Blueprint:** `main`  
+**Methods:** `GET`, `POST`  
+**Template:** `main/fast_loan.html`  
+**Login Required:** No
+
+#### Workflow
+
+1. **Search Phase**: Librarian searches for user by document_id
+2. **Loan Phase**: Librarian selects item and confirms loan
+
+#### Form Fields (Search)
+
+<ParamField path="document_id" type="str" required>
+  User's document ID to search for
+</ParamField>
+
+<ParamField path="submit_search" type="submit">
+  Submit button for search phase
+</ParamField>
+
+#### Form Fields (Loan)
+
+<ParamField path="user_id" type="int" required>
+  Hidden field with selected user's ID
+</ParamField>
+
+<ParamField path="catalog_id" type="int" required>
+  Selected catalog item ID
+</ParamField>
+
+<ParamField path="item_type" type="str" required>
+  Type of item (e.g., 'computo', 'accesorio')
+</ParamField>
+
+<ParamField path="quantity" type="int" required>
+  Number of items (1 for computers, variable for accessories)
+</ParamField>
+
+<ParamField path="environment" type="str">
+  Environment for use (e.g., 'sala', 'externo')
+</ParamField>
+
+<ParamField path="submit_loan" type="submit">
+  Submit button for loan confirmation
+</ParamField>
+
+#### Example
+
+```python
+# Search for user
+user = User.query.filter_by(document_id=search_form.document_id.data).first()
+if not user:
+    flash('Usuario no encontrado. Debes estar registrado.', 'danger')
+    return redirect(url_for('main.fast_loan'))
+
+# Process loan
+success, reserved_ids, msg = InventoryService.reserve_instances(
+    catalog_id, quantity
+)
+if not success:
+    flash(msg, 'warning')
+    return redirect(url_for('main.fast_loan'))
+    
+try:
+    for inst_id in reserved_ids:
+        LoanService.create_loan(
+            user_id=user_id,
+            instance_id=inst_id,
+            environment=environment
+        )
+    db.session.commit()
+    flash('Préstamo rápido registrado con éxito.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Error al procesar la solicitud.', 'danger')
+```
+
+**Source Reference:** `app/main/routes.py:13`
+
+---
+
+### GET/POST /visit
+
+Public kiosk for registering library visits.
+
+**Blueprint:** `main`  
+**Methods:** `GET`, `POST`  
+**Template:** `main/visit.html`  
+**Login Required:** No
+
+#### Form Fields
+
+<ParamField path="document_id" type="str" required>
+  Visitor's document ID
+</ParamField>
+
+<ParamField path="activity" type="str" required>
+  Purpose of visit (e.g., 'Estudio', 'Lectura', 'Préstamo')
+</ParamField>
+
+<ParamField path="visitor_name" type="str">
+  Manual name entry (required only if document_id not registered)
+</ParamField>
+
+#### Business Logic
+
+- If document_id exists in system: Uses registered name and role
+- If document_id not found: Requires manual name, role set to 'Visitante'
+- Creates `LibraryLog` entry with timestamp
+
+#### Example
+
+```python
+document_id = form.document_id.data.strip()
+activity = form.activity.data.strip()
+manual_name = form.visitor_name.data.strip() if form.visitor_name.data else ''
+
+user = User.query.filter_by(document_id=document_id).first()
+
+if user:
+    name, role = user.full_name, user.role
+else:
+    if not manual_name:
+        flash('Documento no registrado. Por favor ingrese su Nombre.', 'warning')
+        return render_template('main/visit.html', form=form, pre_doc=document_id)
+    name, role = manual_name, 'Visitante'
+    
+visit = LibraryLog(
+    visitor_name=name,
+    visitor_id=document_id,
+    role=role,
+    activity=activity
+)
+db.session.add(visit)
+db.session.commit()
+
+flash(f'Bienvenido/a {name}. Actividad: {activity}', 'success')
+```
+
+**Source Reference:** `app/main/routes.py:64`
+
+---
+
+### GET /
+
+Application home/index page with role-based redirection.
+
+**Blueprint:** `main`  
+**Methods:** `GET`  
+**Template:** `main/index.html`  
+**Login Required:** No
+
+#### Behavior
+
+- If authenticated: Redirects to appropriate dashboard based on role
+- If not authenticated: Shows public landing page
+
+**Source Reference:** `app/main/routes.py:93`
+
+---
+
+## Authenticated Routes
+
+### GET /dashboard
+
+User dashboard showing their loans and account information.
+
+**Blueprint:** `main`  
+**Methods:** `GET`  
+**Template:** `premium/dashboard.html`  
+**Login Required:** Yes  
+**Roles:** `premium`, `cliente`
+
+#### Response Data
+
+<ResponseField name="loans" type="list[Loan]">
+  User's loans ordered by request_date (most recent first)
+</ResponseField>
+
+#### Example
+
+```python
+@bp.route('/dashboard')
+@role_required('premium', 'cliente')
+def premium_dashboard():
+    loans = Loan.query.filter_by(user_id=current_user.id)\
+        .order_by(Loan.request_date.desc()).all()
+    return render_template('premium/dashboard.html', loans=loans)
+```
+
+**Source Reference:** `app/main/routes.py:104`
+
+---
+
+### GET /profile
+
+User profile page with loan history.
+
+**Blueprint:** `main`  
+**Methods:** `GET`  
+**Template:** `main/profile.html`  
+**Login Required:** Yes  
+**Roles:** All authenticated users
+
+#### Response Data
+
+<ResponseField name="loans" type="list[Loan]">
+  User's complete loan history ordered by request_date
+</ResponseField>
+
+**Source Reference:** `app/main/routes.py:110`
+
+---
+
+### GET/POST /request/laptop
+
+Request a laptop loan.
+
+**Blueprint:** `main`  
+**Methods:** `GET`, `POST`  
+**Template:** `premium/request_laptop.html`  
+**Login Required:** Yes  
+**Roles:** `premium`, `cliente`
+
+#### Form Fields
+
+<ParamField path="catalog_id" type="int" required>
+  ID of the computer to request
+</ParamField>
+
+<ParamField path="quantity" type="int" required>
+  Number of laptops (1 for 'cliente', variable for 'premium')
+</ParamField>
+
+<ParamField path="environment" type="str" required>
+  Where laptop will be used ('sala' or 'externo')
+</ParamField>
+
+#### Business Rules
+
+- User must not have existing active computer loan
+- Validation via `LoanService.can_request_laptop()`
+- Premium users can request multiple units
+- Cliente users limited to 1 unit
+
+#### Example
+
+```python
+# Validation
+can_request, msg = LoanService.can_request_laptop(current_user.id)
+if not can_request:
+    flash(msg, 'warning')
+    return redirect(url_for('main.premium_dashboard'))
+
+# Quantity based on role
+quantity = form.quantity.data if current_user.role == 'premium' else 1
+
+# Transactional reservation
+success, reserved_ids, r_msg = InventoryService.reserve_instances(
+    catalog_id, quantity
+)
+if not success:
+    flash(r_msg, 'danger')
+    return redirect(url_for('main.premium_dashboard'))
+    
+try:
+    for inst_id in reserved_ids:
+        LoanService.create_loan(
+            user_id=current_user.id,
+            instance_id=inst_id,
+            environment=environment
+        )
+    db.session.commit()
+    flash('Solicitud de portátil enviada correctamente.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Error al generar el préstamo.', 'danger')
+```
+
+**Source Reference:** `app/main/routes.py:116`
+
+---
+
+### GET/POST /request/accessory
+
+Request accessory items (cables, mice, etc.).
+
+**Blueprint:** `main`  
+**Methods:** `GET`, `POST`  
+**Template:** `premium/request_accessory.html`  
+**Login Required:** Yes  
+**Roles:** `premium`, `cliente`
+
+#### Form Fields
+
+<ParamField path="catalog_id" type="int" required>
+  ID of the accessory to request
+</ParamField>
+
+<ParamField path="quantity" type="int" required>
+  Number of accessories to request
+</ParamField>
+
+#### Business Rules
+
+- Maximum 2 simultaneous accessories per user
+- Validation via `LoanService.can_request_accessory()`
+- Cliente users cannot request 'computo' category items
+- Premium users can request any non-book items
+
+#### Example
+
+```python
+# Validation
+can_request, msg = LoanService.can_request_accessory(current_user.id)
+if not can_request:
+    flash(msg, 'warning')
+    return redirect(url_for('main.index'))
+
+# Category exclusion based on role
+exclude_cat = 'computo' if current_user.role == 'cliente' else None
+available_items = CatalogService.get_catalog_with_counts(
+    exclude_category=exclude_cat
+)
+
+# Process request
+success, reserved_ids, r_msg = InventoryService.reserve_instances(
+    catalog_id, quantity
+)
+if not success:
+    flash(r_msg, 'danger')
+    return redirect(url_for('main.request_accessory'))
+
+try:
+    for inst_id in reserved_ids:
+        LoanService.create_loan(
+            user_id=current_user.id,
+            instance_id=inst_id
+        )
+    db.session.commit()
+    flash('Solicitud realizada con éxito.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Error al procesar la solicitud.', 'danger')
+```
+
+**Source Reference:** `app/main/routes.py:154`
+
+---
+
+### GET/POST /request/book
+
+Request a book loan.
+
+**Blueprint:** `main`  
+**Methods:** `GET`, `POST`  
+**Template:** `premium/request_book.html`  
+**Login Required:** Yes  
+**Roles:** `premium`, `cliente`
+
+#### Form Fields
+
+<ParamField path="catalog_id" type="int" required>
+  ID of the book to request
+</ParamField>
+
+#### Business Logic
+
+- Always requests quantity of 1
+- Uses optimized `CatalogService.get_catalog_with_counts()` to avoid N+1 queries
+- Transactional inventory reservation
+- User must pick up book at counter
+
+#### Example
+
+```python
+# Get available books (optimized query)
+available_books = CatalogService.get_catalog_with_counts(
+    category_filter='libro'
+)
+
+# Reserve single book instance
+success, reserved_ids, msg = InventoryService.reserve_instances(
+    catalog_id, 1
+)
+
+if not success:
+    flash(msg, 'danger')
+    return redirect(url_for('main.request_book'))
+    
+try:
+    LoanService.create_loan(
+        user_id=current_user.id,
+        instance_id=reserved_ids[0]
+    )
+    db.session.commit()
+    flash('Solicitud de libro registrada. Acércate al mostrador.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Ocurrió un error al registrar la solicitud.', 'danger')
+```
+
+**Source Reference:** `app/main/routes.py:190`

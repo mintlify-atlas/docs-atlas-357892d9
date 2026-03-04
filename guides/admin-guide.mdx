@@ -1,0 +1,770 @@
+---
+title: 'Administrator Guide'
+description: 'Complete guide for system administrators to manage users, configure the system, and oversee all operations'
+icon: 'shield'
+---
+
+## Welcome, System Administrator!
+
+This guide covers all administrative functions in the SWL Library Management System. As an admin, you have full system control including user management, catalog oversight, and system configuration.
+
+## Getting Started
+
+### Administrator Access
+
+<Steps>
+  <Step title="Login as Admin">
+    Navigate to `/auth/login` and enter your admin credentials
+  </Step>
+  
+  <Step title="Auto-redirect to User Management">
+    After successful login, you're redirected to `/users` - the user management page
+  </Step>
+  
+  <Step title="Explore Admin Features">
+    Navigate between user management, dashboard, catalog, and reports
+  </Step>
+</Steps>
+
+<Info>
+Administrators have access to all features available to librarians, plus exclusive user and system management capabilities.
+</Info>
+
+## User Management
+
+User management is the primary administrative function.
+
+### Accessing User Management
+
+Navigate to `/users` to see all registered users with:
+
+- Pagination (10 users per page)
+- User details (name, document ID, email, role, program)
+- Action buttons for each user (edit, delete)
+- Forms for creating new users and bulk import
+
+### Creating New Users
+
+<Steps>
+  <Step title="Access User Management">
+    Navigate to `/users`
+  </Step>
+  
+  <Step title="Fill User Creation Form">
+    Enter the following information:
+    - **Full Name**: User's complete name
+    - **Document ID**: Unique identifier (will be username)
+    - **Email**: User's email address (must be unique)
+    - **Phone**: Contact phone number
+    - **Role**: Select from:
+      - `cliente` (Student)
+      - `premium` (Premium User)
+      - `bibliotecario` (Librarian)
+      - `admin` (Administrator)
+    - **Program Name**: Required only for 'cliente' role
+    - **Password**: Initial password for the user
+  </Step>
+  
+  <Step title="Submit">
+    Click create. The system will:
+    - Validate uniqueness of document ID and email
+    - Hash the password securely
+    - Set program_name to NULL for non-cliente roles
+    - Add user to database
+  </Step>
+  
+  <Step title="Notify User">
+    Inform the new user of their credentials (document ID and password)
+  </Step>
+</Steps>
+
+<Info>
+**Route Reference:** User creation is handled at `/users/create` (POST method)
+</Info>
+
+<Warning>
+**Validation Checks:**
+- Document ID must be unique
+- Email must be unique
+- All required fields must be filled
+- Password is immediately hashed (never stored in plaintext)
+</Warning>
+
+### Searching Users
+
+Quickly find users with the search feature:
+
+<Steps>
+  <Step title="Use Search Box">
+    Enter search term in the search field
+  </Step>
+  
+  <Step title="Search Filters">
+    The system searches across:
+    - Full name (case-insensitive)
+    - Document ID (case-insensitive)
+  </Step>
+  
+  <Step title="View Results">
+    Results are paginated and sorted alphabetically by name
+    
+    Route: `/users/search?search=<term>&page=<num>`
+  </Step>
+</Steps>
+
+### Editing Users
+
+<Steps>
+  <Step title="Locate User">
+    Find the user in the user management list or via search
+  </Step>
+  
+  <Step title="Click Edit">
+    Each user has an associated edit form
+  </Step>
+  
+  <Step title="Modify Fields">
+    You can update:
+    - Full name
+    - Phone number
+    - Role
+    - Program name (for cliente role)
+    - Password (optional - leave blank to keep current password)
+  </Step>
+  
+  <Step title="Submit Changes">
+    Click update. The system will:
+    - Validate the changes
+    - Update program_name logic based on role
+    - Hash new password if provided
+    - Commit to database
+  </Step>
+</Steps>
+
+<Info>
+**Route Reference:** User editing is at `/users/edit/<user_id>` (POST method)
+</Info>
+
+<Note>
+**Cannot Edit:**
+- Document ID (system identifier)
+- Email address (use as unique contact identifier)
+
+To change these, delete and recreate the user.
+</Note>
+
+### Deleting Users
+
+<Warning>
+**Caution:** User deletion is permanent and cannot be undone. All associated data may be affected.
+</Warning>
+
+<Steps>
+  <Step title="Locate User to Delete">
+    Find the user in user management
+  </Step>
+  
+  <Step title="Click Delete Button">
+    Confirm deletion action
+  </Step>
+  
+  <Step title="System Validation">
+    The system checks:
+    - You're not deleting your own account (prevented)
+    - User exists in database
+  </Step>
+  
+  <Step title="Delete Execution">
+    User record is removed from database
+    
+    Route: `/users/delete/<user_id>` (POST)
+  </Step>
+</Steps>
+
+<Warning>
+**Self-Deletion Prevention:** The system prevents administrators from deleting their own account to avoid lockout scenarios.
+</Warning>
+
+### Bulk User Import
+
+For importing multiple users at once:
+
+<Steps>
+  <Step title="Prepare Import File">
+    Format user data according to import specification (typically CSV)
+  </Step>
+  
+  <Step title="Access Import Form">
+    Use the bulk import form on `/users`
+  </Step>
+  
+  <Step title="Upload File">
+    Select and upload your import file
+    
+    Route: `/users/bulk_import` (POST)
+  </Step>
+  
+  <Step title="Verify Results">
+    Check that all users were created successfully
+  </Step>
+</Steps>
+
+<Note>
+Bulk import details depend on the ImportForm implementation. Check form validation for required format.
+</Note>
+
+## Dashboard and Loan Oversight
+
+Administrators have full access to the librarian dashboard.
+
+### Accessing the Dashboard
+
+Navigate to `/dashboard` to view:
+
+<CardGroup cols={2}>
+  <Card title="Loan Statistics" icon="chart-line">
+    - Pending requests count
+    - Active loans count
+    - Returned items count
+    - Overdue loans count
+  </Card>
+  
+  <Card title="Top Borrowed Items" icon="trophy">
+    Top 5 most-requested catalog items with loan counts
+  </Card>
+  
+  <Card title="Status Filtering" icon="filter">
+    Filter loans by: pendiente, activo, devuelto, atrasado
+  </Card>
+  
+  <Card title="Loan Management" icon="tasks">
+    Approve, reject, and process returns for all loans
+  </Card>
+</CardGroup>
+
+### Loan Management Operations
+
+Administrators can perform all librarian functions:
+
+- **Approve Loans**: `/approve/<loan_id>` (POST)
+- **Reject Loans**: `/reject/<loan_id>` (POST)
+- **Process Returns**: `/loan/<loan_id>/return` (POST)
+
+<Info>
+For detailed loan management procedures, see the [Librarian Guide](/guides/librarian-guide).
+</Info>
+
+## Catalog and Inventory Management
+
+### Catalog Administration
+
+Full catalog control at `/catalog`:
+
+<Steps>
+  <Step title="View Catalog">
+    See all catalog entries with total and available counts
+  </Step>
+  
+  <Step title="Search Catalog">
+    Filter by title/name or category using search box
+  </Step>
+  
+  <Step title="Create Catalog Entries">
+    Add new catalog items:
+    - Title or Name
+    - Category (libro, computo, general)
+    - Author or Brand
+  </Step>
+  
+  <Step title="Delete Entries">
+    Remove catalog items (only if no instances exist)
+    
+    Route: `/catalog/delete/<catalog_id>` (POST)
+  </Step>
+</Steps>
+
+### Instance Management
+
+Manage physical inventory at `/catalog/<catalog_id>/instances`:
+
+<Steps>
+  <Step title="Select Catalog Item">
+    Click on a catalog entry to manage its instances
+  </Step>
+  
+  <Step title="Add Instances">
+    Create physical item records:
+    - **Unique Code**: Barcode, serial number, or identifier
+    - **Condition**: Description of physical condition
+    - **Status**: disponible, mantenimiento, perdido
+  </Step>
+  
+  <Step title="Update Instance Status">
+    Change status for maintenance or lost items
+    
+    Route: `/instance/update_status/<instance_id>` (POST)
+  </Step>
+  
+  <Step title="Delete Instances">
+    Remove instances not part of active loans
+    
+    Route: `/instance/delete/<instance_id>` (POST)
+  </Step>
+</Steps>
+
+<Warning>
+**Instance Deletion Restrictions:**
+- Cannot delete instances involved in pending, active, or overdue loans
+- Ensures data integrity and accurate loan records
+</Warning>
+
+## System Configuration
+
+### Penalty Fee Configuration
+
+The system uses a configurable penalty fee for overdue books:
+
+```python
+# In your Flask configuration (config.py)
+PENALTY_FEE_PER_DAY = 5000.0  # Default: $5,000 COP per day
+```
+
+<Steps>
+  <Step title="Locate Configuration">
+    Find the `config.py` file in your source code
+  </Step>
+  
+  <Step title="Modify PENALTY_FEE_PER_DAY">
+    Change the value to your desired daily penalty amount
+  </Step>
+  
+  <Step title="Restart Application">
+    Restart the Flask application to apply changes
+  </Step>
+  
+  <Step title="Verify">
+    Check that new overdue books use the updated penalty rate
+  </Step>
+</Steps>
+
+<Note>
+Penalty changes only affect new overdue periods. Existing frozen penalties (`final_penalty`) are not retroactively updated.
+</Note>
+
+### Loan Duration Configuration
+
+Default loan period is 15 days, set in `LoanService.create_loan()`:
+
+```python
+# In app/services/loan_service.py
+def create_loan(user_id, instance_id, environment=None, days=15):
+```
+
+To modify:
+
+<Steps>
+  <Step title="Edit loan_service.py">
+    Locate the `create_loan` method
+  </Step>
+  
+  <Step title="Change Default Days">
+    Modify the `days=15` parameter to your desired duration
+  </Step>
+  
+  <Step title="Restart Application">
+    Apply changes by restarting Flask
+  </Step>
+</Steps>
+
+### Automated Overdue Detection
+
+The system runs a background scheduler to detect overdue loans:
+
+- **Function**: `LoanService.check_overdue_loans()`
+- **Action**: Changes 'activo' loans to 'atrasado' when due_date < current_time
+- **Frequency**: Configured in your scheduler setup
+
+<Info>
+To modify scheduler frequency, check your APScheduler configuration in the Flask app initialization.
+</Info>
+
+## Reports and Statistics
+
+### Dashboard Statistics
+
+The admin dashboard provides real-time metrics:
+
+- **Pending Count**: Requests awaiting approval
+- **Active Count**: Currently loaned items
+- **Returned Count**: Successfully returned items
+- **Overdue Count**: Items past due date
+
+### Top Items Report
+
+View the 5 most popular items:
+
+```sql
+-- System query (for reference)
+SELECT catalog.title_or_name, COUNT(loan.id) as total
+FROM catalog
+JOIN item_instance ON item_instance.catalog_id = catalog.id
+JOIN loan ON loan.instance_id = item_instance.id
+GROUP BY catalog.title_or_name
+ORDER BY total DESC
+LIMIT 5
+```
+
+This helps identify:
+- High-demand items (consider adding more instances)
+- Usage patterns by category
+- Inventory expansion opportunities
+
+### Custom Reporting
+
+For advanced reporting:
+
+<Steps>
+  <Step title="Access Database">
+    Use database admin tools to query the database directly
+  </Step>
+  
+  <Step title="Key Tables">
+    - `user`: User accounts and roles
+    - `catalog`: Catalog entries
+    - `item_instance`: Physical inventory
+    - `loan`: All loan transactions
+    - `library_log`: Visitor activity logs
+  </Step>
+  
+  <Step title="Export Data">
+    Extract data for external analysis (Excel, BI tools, etc.)
+  </Step>
+</Steps>
+
+## Role-Based Access Control
+
+Understand the role hierarchy:
+
+<Tabs>
+  <Tab title="Admin">
+    **Full System Access:**
+    - All librarian functions
+    - User creation, editing, deletion
+    - System configuration
+    - Access to all routes
+    
+    **Default Route:** `/users` (user management)
+  </Tab>
+  
+  <Tab title="Bibliotecario">
+    **Loan & Catalog Management:**
+    - Dashboard access
+    - Approve/reject loans
+    - Process returns
+    - Catalog and instance management
+    - Fast loan processing
+    
+    **Restricted:** User management
+    
+    **Default Route:** `/dashboard`
+  </Tab>
+  
+  <Tab title="Premium">
+    **Enhanced User Features:**
+    - Request specialized equipment
+    - Multiple laptop requests
+    - Full accessory catalog
+    - Personal dashboard
+    
+    **Default Route:** `/dashboard`
+  </Tab>
+  
+  <Tab title="Cliente">
+    **Standard User Features:**
+    - Request general equipment (1 laptop max)
+    - Request accessories (2 max, general only)
+    - Request books
+    - Personal dashboard
+    
+    **Default Route:** `/dashboard`
+  </Tab>
+</Tabs>
+
+### Implementing Role Checks
+
+The system uses the `@role_required` decorator:
+
+```python
+from app.utils.decorators import role_required
+
+@bp.route('/users')
+@role_required('admin')
+def manage_users():
+    # Only admin can access
+    ...
+
+@bp.route('/dashboard')
+@role_required('bibliotecario', 'admin')
+def admin_dashboard():
+    # Both bibliotecario and admin can access
+    ...
+```
+
+<Info>
+Routes without role decorators are accessible to all authenticated users.
+</Info>
+
+## User Journey Management
+
+### Upgrading Users
+
+To upgrade a standard student to premium:
+
+<Steps>
+  <Step title="Locate User">
+    Find the user in `/users` or search by name/document
+  </Step>
+  
+  <Step title="Edit User">
+    Click edit and change role from 'cliente' to 'premium'
+  </Step>
+  
+  <Step title="Save Changes">
+    Submit the edit form
+  </Step>
+  
+  <Step title="Immediate Effect">
+    User immediately gains:
+    - Access to specialized equipment
+    - Multi-unit laptop requests
+    - Full accessory catalog
+  </Step>
+</Steps>
+
+### Creating Librarian Accounts
+
+<Steps>
+  <Step title="Create New User">
+    Use the user creation form at `/users`
+  </Step>
+  
+  <Step title="Set Role to 'bibliotecario'">
+    Select librarian role (program_name not required)
+  </Step>
+  
+  <Step title="Provide Credentials">
+    Give the new librarian their document ID and password
+  </Step>
+  
+  <Step title="Train on Dashboard">
+    Ensure they understand loan approval and return processes
+  </Step>
+</Steps>
+
+### Creating Admin Accounts
+
+<Warning>
+**Caution:** Create admin accounts sparingly. Admins have full system control including user deletion and configuration changes.
+</Warning>
+
+<Steps>
+  <Step title="Create User with Admin Role">
+    Use user creation form and select 'admin' role
+  </Step>
+  
+  <Step title="Secure Credentials">
+    Ensure strong password and secure credential transmission
+  </Step>
+  
+  <Step title="Document Admin Access">
+    Keep record of admin accounts for audit purposes
+  </Step>
+</Steps>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="User Management">
+    - Use consistent document ID formats (e.g., student IDs)
+    - Verify email addresses are valid before creating accounts
+    - Set strong initial passwords and advise users to change them
+    - Regularly audit user accounts for inactive or duplicate entries
+    - Document role changes for accountability
+  </Accordion>
+  
+  <Accordion title="Security">
+    - Limit the number of admin accounts
+    - Never share admin credentials
+    - Regularly review user roles to ensure appropriate access
+    - Monitor deletion actions to prevent data loss
+    - Use the self-deletion prevention feature wisely
+  </Accordion>
+  
+  <Accordion title="Catalog Management">
+    - Use descriptive titles and author/brand information
+    - Maintain consistent category naming
+    - Regularly audit catalog for duplicate entries
+    - Remove obsolete catalog items after deleting all instances
+  </Accordion>
+  
+  <Accordion title="Inventory Management">
+    - Use systematic unique codes (e.g., "LAPTOP-001", "BOOK-ISBN")
+    - Document condition descriptions consistently
+    - Promptly mark lost or damaged items
+    - Conduct regular physical inventory checks
+  </Accordion>
+  
+  <Accordion title="System Configuration">
+    - Document all configuration changes
+    - Test penalty rate changes with sample calculations
+    - Schedule configuration updates during low-usage periods
+    - Back up database before major changes
+  </Accordion>
+  
+  <Accordion title="Monitoring and Reporting">
+    - Review dashboard statistics daily
+    - Monitor top items for inventory planning
+    - Track overdue rates to identify systemic issues
+    - Generate regular usage reports for stakeholders
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting Admin Issues
+
+<AccordionGroup>
+  <Accordion title="Cannot Create User - Duplicate Error">
+    **Cause:** Document ID or email already exists
+    
+    **Solution:**
+    1. Search for existing user with that document ID or email
+    2. If found, edit existing user instead
+    3. If not found, check for typos in your input
+    4. Verify database integrity
+  </Accordion>
+  
+  <Accordion title="User Deletion Fails">
+    **Cause:** Attempting to delete own account
+    
+    **Solution:**
+    1. Use another admin account to delete the user
+    2. Or keep the account active
+    3. System prevents self-deletion for safety
+  </Accordion>
+  
+  <Accordion title="Role Change Doesn't Take Effect">
+    **Cause:** User session cached old role
+    
+    **Solution:**
+    1. User must log out and log back in
+    2. Browser cache may need clearing
+    3. Verify database was updated successfully
+  </Accordion>
+  
+  <Accordion title="Catalog Item Cannot Be Deleted">
+    **Cause:** Instances still exist
+    
+    **Solution:**
+    1. Navigate to instance management for that catalog
+    2. Delete all instances first (if not in active loans)
+    3. Return to catalog and delete the entry
+  </Accordion>
+  
+  <Accordion title="Statistics Don't Match Expected Values">
+    **Cause:** Database query or status inconsistency
+    
+    **Solution:**
+    1. Refresh the dashboard page
+    2. Verify loan statuses are accurate
+    3. Check for stale data
+    4. Run database integrity check
+  </Accordion>
+</AccordionGroup>
+
+## Quick Reference: Admin Routes
+
+| Function | Route | Method | Access |
+|----------|-------|--------|--------|
+| User Management | `/users` | GET | Admin |
+| Search Users | `/users/search?search=<term>` | GET | Admin |
+| Create User | `/users/create` | POST | Admin |
+| Edit User | `/users/edit/<user_id>` | POST | Admin |
+| Delete User | `/users/delete/<user_id>` | POST | Admin |
+| Bulk Import | `/users/bulk_import` | POST | Admin |
+| Admin Dashboard | `/dashboard` | GET | Admin, Bibliotecario |
+| Approve Loan | `/approve/<loan_id>` | POST | Admin, Bibliotecario |
+| Reject Loan | `/reject/<loan_id>` | POST | Admin, Bibliotecario |
+| Process Return | `/loan/<loan_id>/return` | POST | Admin, Bibliotecario |
+| Catalog Management | `/catalog` | GET/POST | Admin, Bibliotecario |
+| Instance Management | `/catalog/<catalog_id>/instances` | GET/POST | Admin, Bibliotecario |
+| Update Instance | `/instance/update_status/<instance_id>` | POST | Admin, Bibliotecario |
+| Delete Instance | `/instance/delete/<instance_id>` | POST | Admin, Bibliotecario |
+
+## Database Schema Reference
+
+Key tables and relationships:
+
+### User Table
+```python
+- id (Primary Key)
+- email (Unique)
+- document_id (Unique)
+- full_name
+- phone
+- role (cliente, premium, bibliotecario, admin)
+- program_name (nullable, for cliente only)
+- password_hash
+```
+
+### Catalog Table
+```python
+- id (Primary Key)
+- title_or_name
+- category (libro, computo, general)
+- author_or_brand
+- instances (Relationship to ItemInstance)
+```
+
+### ItemInstance Table
+```python
+- id (Primary Key)
+- catalog_id (Foreign Key → Catalog)
+- unique_code (Unique)
+- status (disponible, prestado, mantenimiento, perdido)
+- condition
+- loans (Relationship to Loan)
+```
+
+### Loan Table
+```python
+- id (Primary Key)
+- user_id (Foreign Key → User)
+- instance_id (Foreign Key → ItemInstance)
+- environment (interno, externo)
+- request_date
+- approval_date (nullable)
+- due_date (nullable)
+- return_date (nullable)
+- status (pendiente, activo, atrasado, devuelto, rechazado)
+- observation (nullable)
+- final_penalty (frozen penalty on return)
+```
+
+## Need Help?
+
+<CardGroup cols={3}>
+  <Card title="Technical Support" icon="laptop-code">
+    For system errors, database issues, or technical problems, consult the development team or system documentation.
+  </Card>
+  
+  <Card title="Policy Guidance" icon="book">
+    For user management policies, penalty rates, or operational procedures, refer to organizational guidelines.
+  </Card>
+  
+  <Card title="User Training" icon="chalkboard-user">
+    To train librarians or premium users, use this documentation as reference material.
+  </Card>
+</CardGroup>
+
+<Check>
+You're fully equipped to administer the SWL Library Management System with confidence!
+</Check>

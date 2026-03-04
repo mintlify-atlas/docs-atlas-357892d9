@@ -1,0 +1,555 @@
+---
+title: 'Librarian Guide'
+description: 'Complete guide for librarians (bibliotecario role) to manage loans, inventory, and daily operations'
+icon: 'books'
+---
+
+## Welcome, Librarian!
+
+This guide covers all daily operations for librarians in the SWL Library Management System. Learn how to approve requests, process returns, manage inventory, and handle overdue loans.
+
+## Getting Started
+
+### Accessing the System
+
+<Steps>
+  <Step title="Login">
+    Navigate to `/auth/login` and enter your credentials using your document ID and password
+  </Step>
+  
+  <Step title="Auto-redirect to Dashboard">
+    After successful login, you'll automatically be redirected to the admin dashboard at `/dashboard`
+  </Step>
+  
+  <Step title="Review Overview">
+    Your dashboard displays key metrics and loan statistics at a glance
+  </Step>
+</Steps>
+
+## Admin Dashboard Overview
+
+The admin dashboard (`/dashboard`) is your central hub for managing all loan operations.
+
+### Dashboard Features
+
+<CardGroup cols={2}>
+  <Card title="Loan Statistics" icon="chart-simple">
+    - Pending requests count
+    - Active loans count
+    - Returned loans count
+    - Overdue loans count
+  </Card>
+  
+  <Card title="Top Items" icon="ranking-star">
+    View the 5 most frequently borrowed items to understand usage patterns
+  </Card>
+  
+  <Card title="Status Filtering" icon="filter">
+    Filter loans by status: pendiente, activo, devuelto, or atrasado
+  </Card>
+  
+  <Card title="Loan Details" icon="list">
+    Each loan displays:
+    - User information
+    - Item details
+    - Request and due dates
+    - Current status
+    - Actions available
+  </Card>
+</CardGroup>
+
+### Status Filter Navigation
+
+Use the status filter tabs to quickly navigate between loan types:
+
+```
+/dashboard?status=pendiente  → View pending approval requests
+/dashboard?status=activo     → View active loans
+/dashboard?status=devuelto   → View returned items
+/dashboard?status=atrasado   → View overdue loans (requires immediate attention)
+```
+
+## Processing Loan Requests
+
+### Approving Loan Requests
+
+<Steps>
+  <Step title="Access Pending Requests">
+    Navigate to `/dashboard?status=pendiente` to view all pending loan requests
+  </Step>
+  
+  <Step title="Review Request Details">
+    For each request, verify:
+    - User information and eligibility
+    - Item requested and availability
+    - Environment (interno vs externo)
+    - User's current active loans
+  </Step>
+  
+  <Step title="Approve the Loan">
+    Click the "Approve" button for the loan. The system will:
+    - Change status from 'pendiente' to 'activo'
+    - Set the approval date to current timestamp
+    - Keep the item instance marked as 'prestado'
+    - Automatically redirect you to active loans view
+  </Step>
+  
+  <Step title="Notify the User">
+    Inform the user their request is approved and they can pick up the item
+  </Step>
+</Steps>
+
+<Info>
+**Route Reference:** The approve action is handled at `/approve/<loan_id>` (POST method)
+</Info>
+
+### What Happens on Approval
+
+When you approve a loan:
+
+1. **Status Change**: Loan status changes from 'pendiente' → 'activo'
+2. **Timestamp**: `approval_date` is set to current UTC time
+3. **Due Date**: Already calculated (15 days from request)
+4. **Item Status**: Remains 'prestado' (was reserved when user submitted request)
+5. **Database Commit**: Changes are saved to the database
+6. **Flash Message**: Success confirmation displayed
+
+### Rejecting Loan Requests
+
+If a request cannot be fulfilled:
+
+<Steps>
+  <Step title="Select Pending Request">
+    Find the request in the pending loans view
+  </Step>
+  
+  <Step title="Click Reject">
+    Use the reject button to deny the request
+  </Step>
+  
+  <Step title="System Actions">
+    The system automatically:
+    - Changes loan status to 'rechazado'
+    - Adds observation: "Rechazado por el bibliotecario"
+    - Releases the reserved item (status: 'prestado' → 'disponible')
+    - Makes the item available for other users
+  </Step>
+  
+  <Step title="Communicate Reason">
+    Inform the user why their request was rejected (system observation is generic)
+  </Step>
+</Steps>
+
+<Warning>
+**Important:** Only reject requests with status 'pendiente'. The system prevents rejecting active or returned loans.
+</Warning>
+
+<Info>
+**Route Reference:** Rejection is handled at `/reject/<loan_id>` (POST method)
+</Info>
+
+## Processing Returns
+
+### Returning Items
+
+<Steps>
+  <Step title="Receive Item from User">
+    Accept the returned item at the library desk
+  </Step>
+  
+  <Step title="Inspect Condition">
+    Verify the item condition matches what was loaned
+  </Step>
+  
+  <Step title="Locate Loan Record">
+    Find the loan in your dashboard (check 'activo' or 'atrasado' status)
+  </Step>
+  
+  <Step title="Process Return">
+    Click the "Return" button. The system will:
+    - Freeze the current penalty amount (for books)
+    - Change loan status to 'devuelto'
+    - Set return_date to current timestamp
+    - **Release the item instance** (status: 'prestado' → 'disponible')
+    - Make the item available for new requests
+  </Step>
+  
+  <Step title="Collect Penalties (if applicable)">
+    If the loan was overdue and is a book, collect the penalty fee displayed
+  </Step>
+</Steps>
+
+<Info>
+**Route Reference:** Returns are processed at `/loan/<loan_id>/return` (POST method)
+</Info>
+
+### Understanding the Return Process
+
+The return operation performs critical inventory management:
+
+```python
+# What happens in the backend:
+1. Final penalty is frozen (penalty_fee → final_penalty)
+2. Loan status changes to 'devuelto'
+3. Return date is timestamp recorded
+4. InventoryService.release_instance() is called
+   - Releases the physical item
+   - Changes instance status to 'disponible'
+   - Transactional safety ensures consistency
+5. Database commit saves all changes
+```
+
+<Warning>
+**Critical:** If the inventory release fails, the entire transaction rolls back. This prevents data inconsistency.
+</Warning>
+
+## Managing Overdue Loans
+
+### Automated Overdue Detection
+
+The system automatically checks for overdue loans using a background scheduler:
+
+- **Automatic Process**: Runs periodically to detect overdue items
+- **Status Update**: Changes 'activo' loans to 'atrasado' when due_date passes
+- **No Manual Action Required**: The scheduler handles detection automatically
+
+### Handling Overdue Items
+
+<Steps>
+  <Step title="View Overdue Loans">
+    Navigate to `/dashboard?status=atrasado` to see all overdue loans
+  </Step>
+  
+  <Step title="Contact Users">
+    Reach out to users with overdue items using their contact information
+  </Step>
+  
+  <Step title="Monitor Penalties">
+    For books, penalties accumulate daily. Check the `penalty_fee` displayed
+  </Step>
+  
+  <Step title="Process Returns">
+    When user returns the item, process normally - the penalty is automatically frozen
+  </Step>
+</Steps>
+
+<Info>
+**Penalty Calculation:**
+- Only applies to books (category: 'libro')
+- Default rate: $5,000 COP per day
+- Calculated as: `days_overdue × penalty_rate`
+- Frozen at return time in `final_penalty` field
+</Info>
+
+### No Penalties for Equipment
+
+<Note>
+Laptops and accessories do not accrue financial penalties. However, users with overdue equipment may face borrowing restrictions.
+</Note>
+
+## Catalog and Inventory Management
+
+Librarians have full access to catalog and inventory management.
+
+### Managing the Catalog
+
+<Steps>
+  <Step title="Access Catalog Management">
+    Navigate to `/catalog` to view and manage the catalog
+  </Step>
+  
+  <Step title="Search Catalog Items">
+    Use the search box to filter by title, name, or category
+  </Step>
+  
+  <Step title="Add New Catalog Entry">
+    Fill out the form:
+    - Title or Name
+    - Category (libro, computo, general)
+    - Author or Brand
+    
+    Submit to create the catalog entry
+  </Step>
+  
+  <Step title="View Item Details">
+    Each catalog entry shows total instances and available count
+  </Step>
+</Steps>
+
+<Info>
+**Route Reference:** Catalog management is at `/catalog` with POST for creating new entries
+</Info>
+
+### Deleting Catalog Entries
+
+<Warning>
+**Restriction:** You cannot delete catalog entries that have physical instances registered. Delete all instances first.
+</Warning>
+
+To delete a catalog entry:
+- Navigate to `/catalog`
+- Find the item with 0 instances
+- Click delete button
+- Route: `/catalog/delete/<catalog_id>` (POST)
+
+### Managing Item Instances
+
+<Steps>
+  <Step title="Access Instance Management">
+    From the catalog view, click on a catalog item to manage its instances
+    
+    Route: `/catalog/<catalog_id>/instances`
+  </Step>
+  
+  <Step title="Add New Instance">
+    Fill out the instance form:
+    - **Unique Code**: Serial number, barcode, or identifier (must be unique)
+    - **Condition**: Description (e.g., "New", "Good", "Fair")
+    - **Status**: disponible, mantenimiento, perdido
+  </Step>
+  
+  <Step title="Submit">
+    Click to add the physical instance to inventory
+  </Step>
+  
+  <Step title="View All Instances">
+    See all instances for this catalog item with their status and condition
+  </Step>
+</Steps>
+
+<Info>
+**Unique Codes:** Each instance must have a unique identifier. The system prevents duplicate codes across the entire inventory.
+</Info>
+
+### Updating Instance Status
+
+Change instance status for maintenance or lost items:
+
+<Steps>
+  <Step title="Locate Instance">
+    In the instance management view, find the specific instance
+  </Step>
+  
+  <Step title="Select New Status">
+    Choose from:
+    - **disponible**: Ready to loan
+    - **mantenimiento**: Under repair/maintenance
+    - **perdido**: Lost or missing
+  </Step>
+  
+  <Step title="Update">
+    Submit the status change
+    
+    Route: `/instance/update_status/<instance_id>` (POST)
+  </Step>
+</Steps>
+
+<Warning>
+**Note:** You cannot change status to 'prestado' manually - this is automatically managed by the loan system.
+</Warning>
+
+### Deleting Instances
+
+<Steps>
+  <Step title="Verify No Active Loans">
+    Ensure the instance is not part of any pending, active, or overdue loan
+  </Step>
+  
+  <Step title="Delete Instance">
+    Click delete button for the instance
+    
+    Route: `/instance/delete/<instance_id>` (POST)
+  </Step>
+</Steps>
+
+<Warning>
+The system prevents deletion of instances involved in active loans to maintain data integrity.
+</Warning>
+
+## Fast Loan Processing
+
+Librarians can process walk-in requests using the fast loan feature:
+
+<Steps>
+  <Step title="Access Fast Loan">
+    Navigate to `/fast_loan`
+  </Step>
+  
+  <Step title="Search for User">
+    Enter the user's document ID and search
+  </Step>
+  
+  <Step title="Verify User">
+    System displays user information and their role
+  </Step>
+  
+  <Step title="Select Item">
+    Choose from available catalog items
+    - Premium users see specialized equipment
+    - General users see standard items
+  </Step>
+  
+  <Step title="Configure Loan">
+    - Item type (computing equipment limits quantity to 1)
+    - Quantity (if not computing)
+    - Environment (interno/externo)
+  </Step>
+  
+  <Step title="Submit">
+    Process the loan immediately - it's created as 'activo' for fast processing
+  </Step>
+</Steps>
+
+<Info>
+Fast loan reserves instances transactionally and creates active loans in one step, bypassing the approval workflow.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Morning Routine">
+    Start each day by:
+    1. Reviewing overdue loans (`/dashboard?status=atrasado`)
+    2. Checking pending requests (`/dashboard?status=pendiente`)
+    3. Contacting users with items due today
+  </Accordion>
+  
+  <Accordion title="Approval Workflow">
+    - Approve requests during business hours for same-day pickup
+    - Verify user eligibility before approving (check active loans)
+    - Batch-approve multiple requests from same user if appropriate
+  </Accordion>
+  
+  <Accordion title="Return Processing">
+    - Always inspect item condition before processing return
+    - Collect penalties immediately for overdue books
+    - Verify item unique code matches the loan record
+  </Accordion>
+  
+  <Accordion title="Inventory Management">
+    - Use specific, consistent unique codes (e.g., "LAPTOP-001", "BOOK-ISBN")
+    - Update instance status promptly when items need maintenance
+    - Mark lost items immediately to prevent false availability
+  </Accordion>
+  
+  <Accordion title="User Communication">
+    - Provide reasons when rejecting requests (call or email)
+    - Send reminders 1-2 days before due dates
+    - Follow up on overdue items daily
+  </Accordion>
+  
+  <Accordion title="End of Day">
+    - Review statistics to identify trends
+    - Check for any pending actions
+    - Ensure all returns are processed
+  </Accordion>
+</AccordionGroup>
+
+## Understanding Role Access
+
+As a librarian (bibliotecario role), you have access to:
+
+<Check>**Allowed Actions:**</Check>
+- View and manage the admin dashboard
+- Approve and reject loan requests
+- Process loan returns
+- Manage catalog (add, view, search, delete entries)
+- Manage item instances (add, update status, delete)
+- Access fast loan feature
+- View all loan statistics and history
+
+<Warning>**Restricted Actions:**</Warning>
+- Cannot create, edit, or delete users (admin only)
+- Cannot modify system configuration
+- Cannot access user management pages
+
+## Troubleshooting Common Issues
+
+<AccordionGroup>
+  <Accordion title="Approval Fails with Error">
+    **Cause:** Loan may not be in 'pendiente' status or database issue
+    
+    **Solution:**
+    1. Refresh the page
+    2. Verify loan status is 'pendiente'
+    3. Check if item instance is still in 'prestado' status
+    4. Contact admin if issue persists
+  </Accordion>
+  
+  <Accordion title="Return Process Shows Error">
+    **Cause:** Inventory release failure
+    
+    **Solution:**
+    1. Transaction automatically rolls back
+    2. Verify instance status in database
+    3. Try return process again
+    4. Contact admin if repeated failures
+  </Accordion>
+  
+  <Accordion title="Cannot Delete Catalog Entry">
+    **Cause:** Catalog has registered instances
+    
+    **Solution:**
+    1. Navigate to instance management for that catalog
+    2. Delete all instances first
+    3. Return to catalog and delete entry
+  </Accordion>
+  
+  <Accordion title="Duplicate Unique Code Error">
+    **Cause:** Instance with that unique code already exists
+    
+    **Solution:**
+    1. Use a different, unique identifier
+    2. Search inventory to find existing instance with that code
+    3. Use sequential numbering to avoid conflicts
+  </Accordion>
+  
+  <Accordion title="User Cannot Request Item">
+    **Cause:** User may have exceeded limits or have overdue items
+    
+    **Solution:**
+    1. Check user's active loans in their dashboard
+    2. Verify they don't have:
+       - An active laptop (for laptop requests)
+       - 2 active accessories (for accessory requests)
+       - Overdue items affecting eligibility
+  </Accordion>
+</AccordionGroup>
+
+## Quick Reference: Key Routes
+
+| Action | Route | Method |
+|--------|-------|--------|
+| Admin Dashboard | `/dashboard` | GET |
+| Filter by Status | `/dashboard?status=<status>` | GET |
+| Approve Loan | `/approve/<loan_id>` | POST |
+| Reject Loan | `/reject/<loan_id>` | POST |
+| Process Return | `/loan/<loan_id>/return` | POST |
+| Catalog Management | `/catalog` | GET/POST |
+| Delete Catalog | `/catalog/delete/<id>` | POST |
+| Manage Instances | `/catalog/<catalog_id>/instances` | GET/POST |
+| Update Instance Status | `/instance/update_status/<instance_id>` | POST |
+| Delete Instance | `/instance/delete/<instance_id>` | POST |
+| Fast Loan | `/fast_loan` | GET/POST |
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Technical Issues" icon="screwdriver-wrench">
+    Contact system administrators for:
+    - Database errors
+    - Permission problems
+    - System configuration issues
+  </Card>
+  
+  <Card title="Policy Questions" icon="circle-question">
+    Consult with senior librarians or administrators for:
+    - Penalty policy clarifications
+    - Special request handling
+    - User eligibility questions
+  </Card>
+</CardGroup>
+
+<Check>
+You're equipped to efficiently manage all daily librarian operations in the SWL Library Management System!
+</Check>

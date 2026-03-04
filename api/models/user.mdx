@@ -1,0 +1,139 @@
+---
+title: 'User Model'
+description: 'User model for authentication and user management in the library system'
+---
+
+## Overview
+
+The `User` model represents registered users in the SWL Library Management System, including both regular clients and premium users. It extends Flask-Login's `UserMixin` for authentication support and includes password hashing capabilities.
+
+## Fields
+
+<ParamField path="id" type="Integer" required>
+  Primary key identifier for the user
+</ParamField>
+
+<ParamField path="email" type="String(120)">
+  User's email address. Unique constraint applied. Nullable to support users without email.
+</ParamField>
+
+<ParamField path="document_id" type="String(20)" required>
+  User's document/ID number. Must be unique and is required for all users.
+</ParamField>
+
+<ParamField path="full_name" type="String(100)" required>
+  User's full name. Required field.
+</ParamField>
+
+<ParamField path="phone" type="String(20)">
+  User's phone number. Optional field.
+</ParamField>
+
+<ParamField path="role" type="String(20)" required>
+  User's role in the system (e.g., 'cliente', 'premium', 'admin'). Required field.
+</ParamField>
+
+<ParamField path="program_name" type="String(100)">
+  Name of the academic program or affiliation. Optional field.
+</ParamField>
+
+<ParamField path="password_hash" type="String(255)">
+  Hashed password for authentication. Never store plain text passwords.
+</ParamField>
+
+## Methods
+
+### set_password(password)
+
+Sets the user's password by generating a secure hash.
+
+**Parameters:**
+- `password` (str): Plain text password to hash and store
+
+**Example:**
+```python
+user = User(email='user@example.com', document_id='123456')
+user.set_password('secure_password_123')
+```
+
+### check_password(password)
+
+Verifies a password against the stored hash.
+
+**Parameters:**
+- `password` (str): Plain text password to verify
+
+**Returns:**
+- `bool`: True if password matches, False otherwise
+
+**Example:**
+```python
+if user.check_password('attempted_password'):
+    # Password is correct
+    login_user(user)
+```
+
+## Relationships
+
+### loans
+
+Back reference to all loans associated with this user.
+
+- **Type:** Dynamic relationship to `Loan` model
+- **Access:** `user.loans.all()` or `user.loans.filter_by(status='activo')`
+
+## Usage Examples
+
+### Creating a New User
+
+```python
+from app.models import User
+from app import db
+
+new_user = User(
+    email='student@university.edu',
+    document_id='1234567890',
+    full_name='John Doe',
+    phone='+57 300 123 4567',
+    role='cliente',
+    program_name='Computer Science'
+)
+new_user.set_password('secure_password')
+db.session.add(new_user)
+db.session.commit()
+```
+
+### User Authentication
+
+```python
+from app.models import User
+from flask_login import login_user
+
+user = User.query.filter_by(document_id=form.document_id.data).first()
+if user and user.check_password(form.password.data):
+    login_user(user)
+    # Redirect to dashboard
+```
+
+### Querying User Loans
+
+```python
+user = User.query.get(user_id)
+active_loans = user.loans.filter_by(status='activo').all()
+pending_loans = user.loans.filter_by(status='pendiente').all()
+```
+
+## Flask-Login Integration
+
+The User model extends `UserMixin` which provides:
+- `is_authenticated`: Property that returns True if user is authenticated
+- `is_active`: Property that returns True if user account is active
+- `is_anonymous`: Property that returns False for regular users
+- `get_id()`: Method that returns the user ID as a string
+
+## Security Notes
+
+- Passwords are hashed using Werkzeug's `generate_password_hash`
+- Never store or log plain text passwords
+- The `password_hash` field should never be exposed in API responses
+- Email addresses have unique constraint to prevent duplicates

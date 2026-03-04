@@ -1,0 +1,494 @@
+---
+title: 'Loan System'
+description: 'Complete loan request, approval, and return workflow with penalty tracking'
+icon: 'hand-holding'
+---
+
+## Overview
+
+The SWL Loan System manages the complete lifecycle of item borrowing, from initial request through approval, active lending, overdue detection, and final return. The system tracks penalties for late returns and enforces business rules based on item categories and user roles.
+
+## Loan Lifecycle
+
+<Steps>
+  <Step title="Request (Pendiente)">
+    User submits a loan request for an available item. The system reserves the physical instance.
+  </Step>
+  <Step title="Approval (Activo)">
+    Librarian reviews and approves the request, activating the loan period.
+  </Step>
+  <Step title="Overdue Detection (Atrasado)">
+    Automated job checks for loans past their due date and marks them as overdue.
+  </Step>
+  <Step title="Return (Devuelto)">
+    Item is returned, penalty is calculated if late, and instance is released back to inventory.
+  </Step>
+</Steps>
+
+## Loan Model
+
+The Loan model tracks all aspects of a borrowing transaction:
+
+```python app/models.py
+class Loan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    instance_id = db.Column(db.Integer, db.ForeignKey('item_instance.id'), nullable=False)
+    environment = db.Column(db.String(50), nullable=True) 
+
+    request_date = db.Column(db.DateTime, default=datetime.utcnow) 
+    approval_date = db.Column(db.DateTime, nullable=True)
+    due_date = db.Column(db.DateTime, nullable=True) 
+    return_date = db.Column(db.DateTime, nullable=True)
+    
+    status = db.Column(db.String(20), default='pendiente')
+    observation = db.Column(db.Text, nullable=True)
+    final_penalty = db.Column(db.Float, default=0.0) 
+
+    requester = db.relationship('User', backref=db.backref('loans', lazy='dynamic'))
+```
+
+### Loan Statuses
+
+| Status | Description | Next Action |
+|--------|-------------|-------------|
+| `pendiente` | Request submitted, awaiting librarian approval | Approve or Reject |
+| `activo` | Approved and item is currently on loan | Return or becomes overdue |
+| `atrasado` | Past due date, penalties accruing | Return with penalty |
+| `devuelto` | Item returned successfully | None (archived) |
+| `rechazado` | Request denied by librarian | None (archived) |
+
+## Creating Loan Requests
+
+### Laptop/Computer Request
+
+Users can request computing equipment with environment specification:
+
+```python app/main/routes.py
+@bp.route('/request/laptop', methods=['GET', 'POST'])
+@role_required('premium', 'cliente')
+def request_laptop():
+    form = RequestItemForm()
+    
+    if form.validate_on_submit():
+        # 1. Check business rules
+        can_request, msg = LoanService.can_request_laptop(current_user.id)
+        if not can_request:
+            flash(msg, 'warning')
+            return redirect(url_for('main.premium_dashboard'))
+
+        # 2. Reserve physical instance
+        catalog_id = form.catalog_id.data
+        environment = form.environment.data
+        success, reserved_ids, r_msg = InventoryService.reserve_instances(catalog_id, 1)
+        
+        if not success:
+            flash(r_msg, 'danger')
+            return redirect(url_for('main.premium_dashboard'))
+            
+        try:
+            # 3. Create loan request
+            LoanService.create_loan(
+                user_id=current_user.id, 
+                instance_id=reserved_ids[0], 
+                environment=environment
+            )
+            db.session.commit()
+            flash('Solicitud de portátil enviada correctamente.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al generar el préstamo.', 'danger')
+```
+
+<Info>
+  **Environment Field**: Tracks where the item will be used (e.g., "Classroom A", "Library", "Home") for accountability.
+</Info>
+
+### Accessory Request
+
+Users can request multiple accessories up to their role limit:
+
+```python app/main/routes.py
+@bp.route('/request/accessory', methods=['GET', 'POST'])
+@role_required('premium', 'cliente')
+def request_accessory():
+    form = RequestItemForm()
+    
+    # Check accessory limit (max 2 simultaneous)
+    can_request, msg = LoanService.can_request_accessory(current_user.id)
+    if not can_request:
+        flash(msg, 'warning')
+        return redirect(url_for('main.index'))
+    
+    if form.validate_on_submit():
+        catalog_id = form.catalog_id.data
+        quantity = form.quantity.data
+        
+        success, reserved_ids, r_msg = InventoryService.reserve_instances(catalog_id, quantity)
+        if not success:
+            flash(r_msg, 'danger')
+            return redirect(url_for('main.request_accessory'))
+
+        try:
+            for inst_id in reserved_ids:
+                LoanService.create_loan(user_id=current_user.id, instance_id=inst_id)
+            db.session.commit()
+            flash('Solicitud realizada con éxito.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al procesar la solicitud.', 'danger')
+```
+
+### Book Request
+
+Book loans are limited to one per request:
+
+```python app/main/routes.py
+@bp.route('/request/book', methods=['GET', 'POST'])
+@role_required('premium', 'cliente')
+def request_book():
+    form = RequestItemForm()
+    available_books = CatalogService.get_catalog_with_counts(category_filter='libro')
+
+    if form.validate_on_submit():
+        catalog_id = form.catalog_id.data
+        
+        success, reserved_ids, msg = InventoryService.reserve_instances(catalog_id, 1)
+        
+        if not success:
+            flash(msg, 'danger')
+            return redirect(url_for('main.request_book'))
+            
+        try:
+            LoanService.create_loan(user_id=current_user.id, instance_id=reserved_ids[0])
+            db.session.commit()
+            flash('Solicitud de libro registrada. Acércate al mostrador.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Ocurrió un error al registrar la solicitud.', 'danger')
+```
+
+## Loan Service Layer
+
+### Business Rule Validation
+
+```python app/services/loan_service.py
+class LoanService:
+    @staticmethod
+    def can_request_laptop(user_id):
+        """Users can only have one computer loan active at a time"""
+        active_loans = Loan.query.join(ItemInstance).join(Catalog).filter(
+            Loan.user_id == user_id,
+            Loan.status.in_(['pendiente', 'activo', 'atrasado']), 
+            Catalog.category == 'computo'
+        ).count()
+        if active_loans > 0:
+            return False, "Ya tienes un equipo pendiente, en uso o atrasado."
+        return True, "Ok"
+
+    @staticmethod
+    def can_request_accessory(user_id):
+        """Users can have up to 2 accessories simultaneously"""
+        active_accessories = Loan.query.join(ItemInstance).join(Catalog).filter(
+            Loan.user_id == user_id,
+            Catalog.category != 'computo',
+            Catalog.category != 'libro',
+            Loan.status.in_(['pendiente', 'activo', 'atrasado'])
+        ).count()
+        if active_accessories >= 2:
+            return False, "Has alcanzado el límite de 2 accesorios simultáneos."
+        return True, "Ok"
+```
+
+### Creating Loans
+
+```python app/services/loan_service.py
+@staticmethod
+def create_loan(user_id, instance_id, environment=None, days=15):
+    # Calculate due date
+    due_date = datetime.utcnow() + timedelta(days=days)
+    
+    new_loan = Loan(
+        user_id=user_id,
+        instance_id=instance_id,
+        environment=environment,
+        status='pendiente',
+        due_date=due_date
+    )
+    db.session.add(new_loan)
+    
+    # Note: Controller commits the transaction
+    return new_loan
+```
+
+<Warning>
+  The `create_loan` method does NOT commit the transaction. The calling controller is responsible for committing, allowing for atomic multi-item reservations.
+</Warning>
+
+## Approval Workflow
+
+### Approving Loans
+
+Librarians review pending requests and approve them:
+
+```python app/services/loan_service.py
+@staticmethod
+def approve_loan(loan_id):
+    loan = Loan.query.get(loan_id)
+    if not loan or loan.status != 'pendiente':
+        return False, "Préstamo no válido o ya procesado."
+    
+    loan.status = 'activo'
+    loan.approval_date = datetime.utcnow()
+    
+    db.session.commit()
+    return True, "Préstamo aprobado con éxito."
+```
+
+```python app/admin/routes.py
+@bp.route('/approve/<int:id>', methods=['POST'])
+@role_required('bibliotecario')
+def approve(id):
+    success, msg = LoanService.approve_loan(id)
+    
+    if success:
+        flash(msg, 'success')
+        return redirect(url_for('admin.admin_dashboard', status='activo'))
+    else:
+        flash(msg, 'danger')
+        return redirect(url_for('admin.admin_dashboard', status='pendiente'))
+```
+
+### Rejecting Loans
+
+Librarians can reject invalid or problematic requests:
+
+```python app/admin/routes.py
+@bp.route('/reject/<int:id>', methods=['POST'])
+@role_required('bibliotecario')
+def reject_loan(id):
+    loan = Loan.query.get_or_404(id)
+    if loan.status == 'pendiente':
+        loan.status = 'rechazado'
+        loan.observation = 'Rechazado por el bibliotecario.' 
+        
+        # Release the reserved instance back to inventory
+        if loan.item_instance:
+            loan.item_instance.status = 'disponible'
+
+        db.session.commit()
+        flash('Solicitud rechazada. Se liberó la reserva física.', 'success')
+    else:
+        flash('Solo puedes rechazar solicitudes que estén pendientes.', 'warning')
+```
+
+## Overdue Detection
+
+### Automated Overdue Checking
+
+The system runs a scheduled job to detect overdue loans:
+
+```python app/services/loan_service.py
+@staticmethod
+def check_overdue_loans():
+    """Find all active loans past their due date"""
+    overdue_loans = Loan.query.filter(
+        Loan.status == 'activo', 
+        Loan.due_date < datetime.utcnow()
+    ).all()
+    
+    count = 0
+    for loan in overdue_loans:
+        loan.status = 'atrasado'
+        count += 1
+        
+    if count > 0:
+        db.session.commit()
+        
+    return count
+```
+
+<Info>
+  This method is typically called by a background scheduler (e.g., APScheduler) to run periodically.
+</Info>
+
+### Overdue Detection Property
+
+Loans can check if they're overdue in real-time:
+
+```python app/models.py
+@property
+def is_overdue(self):
+    if self.status not in ['devuelto', 'rechazado'] and self.due_date:
+        return datetime.utcnow() > self.due_date
+    return False
+```
+
+## Penalty Calculation
+
+### Penalty Fees
+
+Penalties are calculated only for overdue books:
+
+```python app/models.py
+@property
+def penalty_fee(self):
+    # Only books incur penalties
+    if not self.item_instance or self.item_instance.catalog_item.category != 'libro':
+        return 0.0
+
+    if self.is_overdue:
+        days_late = (datetime.utcnow() - self.due_date).days
+        if days_late > 0:
+            # Get penalty rate from config (default: 5000.0 per day)
+            fee = current_app.config.get('PENALTY_FEE_PER_DAY', 5000.0)
+            return days_late * fee
+    return 0.0
+```
+
+<Note>
+  **Category-Specific Penalties**: Only books (`category='libro'`) incur late fees. Computing equipment and accessories do not generate financial penalties.
+</Note>
+
+### Finalizing Penalties on Return
+
+When a loan is returned, the current penalty is frozen:
+
+```python app/services/loan_service.py
+@staticmethod
+def return_loan(loan_id):
+    loan = Loan.query.get(loan_id)
+    if not loan or loan.status not in ['activo', 'atrasado']:
+        return False, "Préstamo no válido o no está activo."
+    
+    # Save the final penalty amount
+    if loan.is_overdue:
+        loan.final_penalty = loan.penalty_fee
+        
+    loan.status = 'devuelto'
+    loan.return_date = datetime.utcnow()
+    
+    # Release the physical instance
+    if loan.item_instance:
+        loan.item_instance.status = 'disponible'
+        
+    db.session.commit()
+    return True, "Artículo devuelto exitosamente al inventario."
+```
+
+## Return Process
+
+### Librarian-Initiated Return
+
+```python app/admin/routes.py
+@bp.route('/loan/<int:loan_id>/return', methods=['POST'])
+@role_required('admin', 'bibliotecario')
+def return_loan(loan_id):
+    loan = Loan.query.get_or_404(loan_id)
+    
+    if loan.status != 'devuelto':
+        # Freeze penalty for history
+        loan.final_penalty = loan.penalty_fee
+        loan.status = 'devuelto'
+        loan.return_date = datetime.utcnow()
+        
+        # Release instance using service
+        success, msg = InventoryService.release_instance(loan.instance_id)
+        
+        if success:
+            db.session.commit()
+            flash('Ítem devuelto y reingresado al inventario con éxito.', 'success')
+        else:
+            db.session.rollback()
+            flash(f'Error al liberar inventario: {msg}', 'danger')
+            
+    return redirect(request.referrer or url_for('admin.dashboard'))
+```
+
+## Loan Dashboard
+
+### User Dashboard
+
+Users view their loan history and current loans:
+
+```python app/main/routes.py
+@bp.route('/dashboard')
+@role_required('premium', 'cliente')
+def premium_dashboard():
+    loans = Loan.query.filter_by(user_id=current_user.id).order_by(
+        Loan.request_date.desc()
+    ).all()
+    return render_template('premium/dashboard.html', loans=loans)
+```
+
+### Librarian Dashboard
+
+Librarians see all loans with statistics and filtering:
+
+```python app/admin/routes.py
+@bp.route('/dashboard')
+@role_required('bibliotecario', 'admin')
+def admin_dashboard():
+    status_filter = request.args.get('status', 'pendiente')
+    
+    pending_count = Loan.query.filter_by(status='pendiente').count()
+    activo_count = Loan.query.filter_by(status='activo').count()
+    returned_count = Loan.query.filter_by(status='devuelto').count()
+    atrasado_count = Loan.query.filter_by(status='atrasado').count()
+    
+    query = Loan.query.filter(Loan.status == status_filter)
+    loans = query.order_by(Loan.request_date.desc()).all()
+    
+    stats = {
+        'pending': pending_count,
+        'activo': activo_count,
+        'returned': returned_count,
+        'atrasado': atrasado_count
+    }
+    
+    return render_template('admin/dashboard.html', loans=loans, 
+                         current_status=status_filter, stats=stats)
+```
+
+## Timezone Handling
+
+The system includes timezone-aware properties for local display:
+
+```python app/models.py
+@property
+def request_date_co(self):
+    """Colombia timezone (UTC-5)"""
+    return self.request_date - timedelta(hours=5) if self.request_date else None
+
+@property
+def due_date_co(self):
+    """Colombia timezone (UTC-5)"""
+    return self.due_date - timedelta(hours=5) if self.due_date else None
+```
+
+<Tip>
+  Use these properties in templates to display dates in the local timezone without converting stored UTC values.
+</Tip>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Atomic Reservations" icon="lock">
+    Always reserve inventory before creating loans to prevent race conditions.
+  </Card>
+  <Card title="Transaction Management" icon="database">
+    Use database transactions to ensure consistency between loans and inventory.
+  </Card>
+  <Card title="Status Validation" icon="check-circle">
+    Validate loan status before state transitions (e.g., only approve 'pendiente' loans).
+  </Card>
+  <Card title="Penalty Freezing" icon="snowflake">
+    Always freeze `final_penalty` at return time for accurate historical records.
+  </Card>
+</CardGroup>
+
+## Related Features
+
+- [Inventory Management](/features/inventory-management) - How loans interact with physical item instances
+- [Fast Loan Kiosk](/features/fast-loan-kiosk) - Quick loan creation without full authentication
+- [User Management](/features/user-management) - Role-based loan permissions

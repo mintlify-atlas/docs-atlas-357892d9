@@ -1,0 +1,655 @@
+---
+title: Deployment
+description: Deploy the SWL Library Management System to production environments
+---
+
+This guide covers production deployment strategies for the SWL Library Management System, including server configuration, security considerations, and best practices.
+
+## Production vs Development
+
+### Development Mode
+
+The default `run.py` configuration runs in development mode (`run.py:54`):
+
+```python
+app.run(host='0.0.0.0', port=5000, debug=True)
+```
+
+**Development Settings**:
+- Debug mode enabled
+- Auto-reload on code changes
+- Detailed error pages
+- SQLite database
+- Flask development server
+
+<Warning>
+  **NEVER** run with `debug=True` in production. This exposes sensitive information and allows arbitrary code execution.
+</Warning>
+
+### Production Requirements
+
+**Critical Changes**:
+1. ✓ Disable debug mode
+2. ✓ Use PostgreSQL instead of SQLite
+3. ✓ Use production WSGI server (gunicorn/uwsgi)
+4. ✓ Set secure `SECRET_KEY`
+5. ✓ Configure proper logging
+6. ✓ Enable HTTPS/SSL
+7. ✓ Set up reverse proxy (nginx/apache)
+
+## Production Deployment Options
+
+### Option 1: Gunicorn (Recommended)
+
+**Install Gunicorn**:
+```bash
+pip install gunicorn
+```
+
+**Run Application**:
+```bash
+gunicorn -w 4 -b 0.0.0.0:5000 "app:create_app()"
+```
+
+**Gunicorn Configuration** (`gunicorn_config.py`):
+```python
+import multiprocessing
+
+# Binding
+bind = "0.0.0.0:5000"
+
+# Workers
+workers = multiprocessing.cpu_count() * 2 + 1
+worker_class = "sync"
+
+# Logging
+accesslog = "logs/gunicorn_access.log"
+errorlog = "logs/gunicorn_error.log"
+loglevel = "info"
+
+# Process naming
+proc_name = "swl_library"
+
+# Timeout
+timeout = 120
+
+# Daemon mode
+daemon = False
+```
+
+**Run with config**:
+```bash
+gunicorn -c gunicorn_config.py "app:create_app()"
+```
+
+### Option 2: uWSGI
+
+**Install uWSGI**:
+```bash
+pip install uwsgi
+```
+
+**uWSGI Configuration** (`uwsgi.ini`):
+```ini
+[uwsgi]
+module = wsgi:app
+master = true
+processes = 4
+socket = /tmp/library.sock
+chmod-socket = 660
+vacuum = true
+die-on-term = true
+
+# Logging
+logto = logs/uwsgi.log
+```
+
+**Run uWSGI**:
+```bash
+uwsgi --ini uwsgi.ini
+```
+
+## PostgreSQL Configuration
+
+### 1. Install PostgreSQL
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+# Start and enable service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+### 2. Create Production Database
+
+```bash
+sudo -u postgres psql
+```
+
+```sql
+-- Create database
+CREATE DATABASE library_production;
+
+-- Create user with strong password
+CREATE USER library_user WITH PASSWORD 'CHANGE_THIS_SECURE_PASSWORD';
+
+-- Grant privileges
+GRANT ALL PRIVILEGES ON DATABASE library_production TO library_user;
+
+-- Grant schema privileges (PostgreSQL 15+)
+GRANT ALL ON SCHEMA public TO library_user;
+
+\q
+```
+
+### 3. Install Python PostgreSQL Driver
+
+```bash
+pip install psycopg2-binary
+```
+
+## Environment Configuration
+
+### Production Environment Variables
+
+Create a `.env` file (never commit to git):
+
+```bash
+# Security
+SECRET_KEY=your-secure-random-key-generated-with-secrets-module
+
+# Database
+DATABASE_URL=postgresql://library_user:SECURE_PASSWORD@localhost/library_production
+
+# Business Settings
+PENALTY_FEE_PER_DAY=5000.0
+
+# Scheduler
+SCHEDULER_TIMEZONE=America/Bogota
+```
+
+**Generate Secure Secret Key**:
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### Loading Environment Variables
+
+**Option 1: python-dotenv**
+```bash
+pip install python-dotenv
+```
+
+**Create `wsgi.py`**:
+```python
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+from app import create_app
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run()
+```
+
+**Option 2: systemd environment file** (see Systemd Service section)
+
+## Network Configuration
+
+### Binding to Network Interfaces
+
+The application binds to all interfaces (`run.py:54`):
+
+```python
+app.run(host='0.0.0.0', port=5000)
+```
+
+**Network Binding Options**:
+
+| Host | Description | Use Case |
+|------|-------------|----------|
+| `127.0.0.1` | Localhost only | Development, reverse proxy |
+| `0.0.0.0` | All interfaces | Production (behind firewall) |
+| `192.168.1.10` | Specific IP | Multi-interface servers |
+
+<Note>
+  When using a reverse proxy (nginx/apache), bind to `127.0.0.1` for security.
+</Note>
+
+### Firewall Configuration
+
+```bash
+# Allow only from reverse proxy (if on same machine)
+sudo ufw allow from 127.0.0.1 to any port 5000
+
+# Or allow from specific network
+sudo ufw allow from 192.168.1.0/24 to any port 5000
+
+# Enable firewall
+sudo ufw enable
+```
+
+## Reverse Proxy Setup
+
+### Nginx Configuration
+
+**Install Nginx**:
+```bash
+sudo apt install nginx
+```
+
+**Create site configuration** (`/etc/nginx/sites-available/library`):
+```nginx
+server {
+    listen 80;
+    server_name library.example.com;
+
+    # Redirect to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name library.example.com;
+
+    # SSL certificates (use Let's Encrypt)
+    ssl_certificate /etc/letsencrypt/live/library.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/library.example.com/privkey.pem;
+
+    # SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Logging
+    access_log /var/log/nginx/library_access.log;
+    error_log /var/log/nginx/library_error.log;
+
+    # Proxy to application
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Static files (if served separately)
+    location /static {
+        alias /path/to/app/static;
+        expires 30d;
+    }
+}
+```
+
+**Enable site**:
+```bash
+sudo ln -s /etc/nginx/sites-available/library /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### SSL/TLS with Let's Encrypt
+
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Obtain certificate
+sudo certbot --nginx -d library.example.com
+
+# Auto-renewal is configured automatically
+# Test renewal
+sudo certbot renew --dry-run
+```
+
+## Systemd Service Setup
+
+### Create Service File
+
+**Create** `/etc/systemd/system/library.service`:
+
+```ini
+[Unit]
+Description=SWL Library Management System
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=notify
+User=library
+Group=library
+WorkingDirectory=/opt/library
+
+# Environment file
+EnvironmentFile=/opt/library/.env
+
+# Virtual environment
+Environment="PATH=/opt/library/venv/bin"
+
+# Run gunicorn
+ExecStart=/opt/library/venv/bin/gunicorn \
+    -c gunicorn_config.py \
+    --log-file=- \
+    "wsgi:app"
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Create System User
+
+```bash
+# Create dedicated user (no login)
+sudo useradd -r -s /bin/false library
+
+# Set ownership
+sudo chown -R library:library /opt/library
+```
+
+### Manage Service
+
+```bash
+# Reload systemd configuration
+sudo systemctl daemon-reload
+
+# Enable service (start on boot)
+sudo systemctl enable library
+
+# Start service
+sudo systemctl start library
+
+# Check status
+sudo systemctl status library
+
+# View logs
+sudo journalctl -u library -f
+
+# Restart service
+sudo systemctl restart library
+
+# Stop service
+sudo systemctl stop library
+```
+
+## Security Considerations
+
+### 1. Secret Key Security
+
+<Warning>
+  The `SECRET_KEY` is used for session signing and CSRF protection. If compromised, attackers can forge sessions.
+</Warning>
+
+**Requirements**:
+- Minimum 32 bytes of randomness
+- Never use default development key
+- Never commit to version control
+- Rotate periodically (invalidates sessions)
+
+**Generate secure key**:
+```python
+import secrets
+print(secrets.token_hex(32))
+```
+
+### 2. Database Security
+
+**Checklist**:
+- ✓ Use strong database passwords (20+ characters)
+- ✓ Restrict PostgreSQL network access
+- ✓ Use connection pooling
+- ✓ Enable SSL for database connections
+- ✓ Regular backups with encryption
+- ✓ Limit database user privileges
+
+**PostgreSQL SSL Configuration** (`postgresql.conf`):
+```ini
+ssl = on
+ssl_cert_file = '/etc/ssl/certs/server.crt'
+ssl_key_file = '/etc/ssl/private/server.key'
+```
+
+### 3. Application Security
+
+**File Permissions**:
+```bash
+# Application files
+chmod 755 /opt/library
+chmod 644 /opt/library/*.py
+
+# Environment file (sensitive)
+chmod 600 /opt/library/.env
+
+# Log directory
+chmod 755 /opt/library/logs
+chmod 644 /opt/library/logs/*.log
+```
+
+**Disable Debug Mode**:
+```python
+# Never in production
+app.run(debug=False)
+```
+
+### 4. Change Default Credentials
+
+<Warning>
+  **CRITICAL**: The default admin account uses well-known credentials:
+  - Document ID: `1000000000`
+  - Password: `admin123`
+  
+  Change this immediately after deployment!
+</Warning>
+
+**Steps**:
+1. Log in with default credentials
+2. Navigate to profile/settings
+3. Change password to strong, unique value
+4. Update email to valid administrator email
+
+### 5. HTTPS/TLS
+
+**Requirements**:
+- Use TLS 1.2 or higher
+- Strong cipher suites
+- Valid SSL certificate
+- HSTS headers
+
+**Nginx HSTS Configuration**:
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+```
+
+### 6. Rate Limiting
+
+**Install Flask-Limiter**:
+```bash
+pip install Flask-Limiter
+```
+
+**Configure** (`app/__init__.py`):
+```python
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+```
+
+## Monitoring and Logging
+
+### Application Logs
+
+Logs are written to `logs/library.log` with rotation (`app/__init__.py:49`):
+
+- Max file size: 1MB
+- Backup count: 3 files
+- Log level: INFO
+
+**Log Format**:
+```
+2026-03-04 10:23:45,123 INFO: LMS Startup - Technical Specs Initialized [in app/__init__.py:56]
+```
+
+### System Monitoring
+
+**View application logs**:
+```bash
+tail -f /opt/library/logs/library.log
+```
+
+**View systemd logs**:
+```bash
+sudo journalctl -u library -f
+```
+
+**Monitor database**:
+```bash
+# Active connections
+sudo -u postgres psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='library_production';"
+
+# Database size
+sudo -u postgres psql -c "SELECT pg_size_pretty(pg_database_size('library_production'));"
+```
+
+## Performance Optimization
+
+### 1. Database Connection Pooling
+
+**Configure SQLAlchemy** (`config.py`):
+```python
+SQLALCHEMY_ENGINE_OPTIONS = {
+    'pool_size': 10,
+    'pool_recycle': 3600,
+    'pool_pre_ping': True,
+    'max_overflow': 20
+}
+```
+
+### 2. Worker Configuration
+
+**Gunicorn workers**:
+```python
+# Formula: (2 x CPU cores) + 1
+workers = multiprocessing.cpu_count() * 2 + 1
+```
+
+### 3. Static File Serving
+
+**Nginx static file caching**:
+```nginx
+location /static {
+    alias /opt/library/app/static;
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+}
+```
+
+## Deployment Checklist
+
+### Pre-Deployment
+
+- [ ] Generate secure `SECRET_KEY`
+- [ ] Configure PostgreSQL database
+- [ ] Set all environment variables
+- [ ] Install production dependencies
+- [ ] Run database migrations
+- [ ] Change default admin password
+- [ ] Test application locally
+
+### Deployment
+
+- [ ] Create system user
+- [ ] Set file permissions
+- [ ] Configure systemd service
+- [ ] Set up reverse proxy (nginx)
+- [ ] Configure SSL/TLS certificates
+- [ ] Enable firewall rules
+- [ ] Start and enable service
+
+### Post-Deployment
+
+- [ ] Verify application is running
+- [ ] Test login functionality
+- [ ] Check database connectivity
+- [ ] Verify scheduled tasks (overdue check)
+- [ ] Monitor logs for errors
+- [ ] Set up automated backups
+- [ ] Configure monitoring/alerts
+- [ ] Document deployment details
+
+## Troubleshooting
+
+### Application Won't Start
+
+**Check logs**:
+```bash
+sudo journalctl -u library -n 50
+```
+
+**Common issues**:
+- Database connection errors → verify `DATABASE_URL`
+- Import errors → check virtual environment
+- Permission denied → verify file ownership
+
+### Database Connection Failures
+
+**Test connection**:
+```bash
+psql -U library_user -h localhost library_production
+```
+
+**Check PostgreSQL**:
+```bash
+sudo systemctl status postgresql
+sudo tail -f /var/log/postgresql/postgresql-14-main.log
+```
+
+### 502 Bad Gateway (Nginx)
+
+**Causes**:
+- Application not running
+- Wrong proxy_pass address
+- Firewall blocking connection
+
+**Check**:
+```bash
+# Is application running?
+sudo systemctl status library
+
+# Test direct connection
+curl http://127.0.0.1:5000
+
+# Check nginx error log
+sudo tail -f /var/log/nginx/library_error.log
+```
+
+## See Also
+
+- [Configuration](/admin/configuration) - Environment variables and settings
+- [Database Setup](/admin/database-setup) - Database initialization and migrations
+- [User Roles](/admin/user-roles) - User management and permissions

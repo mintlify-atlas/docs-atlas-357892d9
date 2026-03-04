@@ -1,0 +1,326 @@
+---
+title: 'LibraryLog Model'
+description: 'LibraryLog model for tracking library visitors and their activities'
+---
+
+## Overview
+
+The `LibraryLog` model tracks all visits to the library facility, recording visitor information, entry time, and the activity they're performing. This model is useful for occupancy tracking, visitor statistics, and library usage analysis.
+
+## Fields
+
+<ParamField path="id" type="Integer" required>
+  Primary key identifier for the log entry
+</ParamField>
+
+<ParamField path="visitor_name" type="String(100)" required>
+  Full name of the library visitor. Required field with maximum 100 characters.
+</ParamField>
+
+<ParamField path="visitor_id" type="String(20)" required>
+  Document ID or identification number of the visitor. Required field with maximum 20 characters.
+</ParamField>
+
+<ParamField path="role" type="String(20)" required>
+  Role or affiliation of the visitor (e.g., 'estudiante', 'profesor', 'visitante', 'admin'). Required field.
+</ParamField>
+
+<ParamField path="entry_time" type="DateTime" default="datetime.utcnow">
+  UTC timestamp when the visitor entered the library. Defaults to current UTC time.
+</ParamField>
+
+<ParamField path="activity" type="String(50)" required>
+  The activity the visitor is performing (e.g., 'lectura', 'estudio', 'investigación', 'préstamo'). Required field.
+</ParamField>
+
+## Usage Examples
+
+### Recording a Library Visit
+
+```python
+from app.models import LibraryLog
+from app import db
+from datetime import datetime
+
+# Log a visitor entry
+log_entry = LibraryLog(
+    visitor_name='Maria Rodriguez',
+    visitor_id='1234567890',
+    role='estudiante',
+    activity='lectura'
+)
+db.session.add(log_entry)
+db.session.commit()
+```
+
+### Querying Today's Visitors
+
+```python
+from app.models import LibraryLog
+from datetime import datetime, timedelta
+
+# Get all entries from today
+today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+today_entries = LibraryLog.query.filter(
+    LibraryLog.entry_time >= today_start
+).all()
+
+print(f"Total visitors today: {len(today_entries)}")
+```
+
+### Counting Current Occupancy
+
+```python
+from app.models import LibraryLog
+from datetime import datetime, timedelta
+
+# Assuming entries in the last 4 hours represent current occupancy
+four_hours_ago = datetime.utcnow() - timedelta(hours=4)
+current_visitors = LibraryLog.query.filter(
+    LibraryLog.entry_time >= four_hours_ago
+).count()
+
+print(f"Current occupancy (approx): {current_visitors}")
+```
+
+### Visitor Statistics by Role
+
+```python
+from app.models import LibraryLog
+from sqlalchemy import func
+
+# Count visitors by role
+role_stats = db.session.query(
+    LibraryLog.role,
+    func.count(LibraryLog.id)
+).group_by(LibraryLog.role).all()
+
+for role, count in role_stats:
+    print(f"{role}: {count} visits")
+```
+
+### Activity Analysis
+
+```python
+from app.models import LibraryLog
+from sqlalchemy import func
+
+# Most common activities
+activity_stats = db.session.query(
+    LibraryLog.activity,
+    func.count(LibraryLog.id)
+).group_by(LibraryLog.activity).order_by(
+    func.count(LibraryLog.id).desc()
+).all()
+
+print("Most common activities:")
+for activity, count in activity_stats:
+    print(f"  {activity}: {count} times")
+```
+
+### Date Range Queries
+
+```python
+from app.models import LibraryLog
+from datetime import datetime, timedelta
+
+# Get logs for last 7 days
+week_ago = datetime.utcnow() - timedelta(days=7)
+week_entries = LibraryLog.query.filter(
+    LibraryLog.entry_time >= week_ago
+).all()
+
+# Get logs for specific date
+specific_date = datetime(2024, 3, 15)
+next_day = specific_date + timedelta(days=1)
+day_entries = LibraryLog.query.filter(
+    LibraryLog.entry_time >= specific_date,
+    LibraryLog.entry_time < next_day
+).all()
+```
+
+### Peak Hours Analysis
+
+```python
+from app.models import LibraryLog
+from sqlalchemy import func, extract
+
+# Count visits by hour of day
+hourly_stats = db.session.query(
+    extract('hour', LibraryLog.entry_time).label('hour'),
+    func.count(LibraryLog.id).label('count')
+).group_by('hour').order_by('hour').all()
+
+print("Visits by hour (UTC):")
+for hour, count in hourly_stats:
+    print(f"  {int(hour):02d}:00 - {count} visits")
+```
+
+### Frequent Visitors
+
+```python
+from app.models import LibraryLog
+from sqlalchemy import func
+
+# Find most frequent visitors
+frequent = db.session.query(
+    LibraryLog.visitor_name,
+    LibraryLog.visitor_id,
+    func.count(LibraryLog.id).label('visit_count')
+).group_by(
+    LibraryLog.visitor_name,
+    LibraryLog.visitor_id
+).order_by(
+    func.count(LibraryLog.id).desc()
+).limit(10).all()
+
+print("Top 10 frequent visitors:")
+for name, vid, count in frequent:
+    print(f"  {name} ({vid}): {count} visits")
+```
+
+### Daily Summary Report
+
+```python
+from app.models import LibraryLog
+from datetime import datetime, timedelta
+
+def generate_daily_summary(date):
+    """Generate a summary report for a specific date"""
+    start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    
+    entries = LibraryLog.query.filter(
+        LibraryLog.entry_time >= start,
+        LibraryLog.entry_time < end
+    ).all()
+    
+    # Calculate statistics
+    total_visitors = len(entries)
+    unique_visitors = len(set(e.visitor_id for e in entries))
+    
+    role_breakdown = {}
+    activity_breakdown = {}
+    
+    for entry in entries:
+        role_breakdown[entry.role] = role_breakdown.get(entry.role, 0) + 1
+        activity_breakdown[entry.activity] = activity_breakdown.get(entry.activity, 0) + 1
+    
+    return {
+        'date': date.strftime('%Y-%m-%d'),
+        'total_visits': total_visitors,
+        'unique_visitors': unique_visitors,
+        'by_role': role_breakdown,
+        'by_activity': activity_breakdown
+    }
+
+# Generate today's summary
+today_summary = generate_daily_summary(datetime.utcnow())
+print(today_summary)
+```
+
+### Export Logs to CSV
+
+```python
+import csv
+from app.models import LibraryLog
+from datetime import datetime, timedelta
+
+def export_logs_to_csv(filename, start_date, end_date):
+    """Export library logs to CSV file"""
+    logs = LibraryLog.query.filter(
+        LibraryLog.entry_time >= start_date,
+        LibraryLog.entry_time < end_date
+    ).order_by(LibraryLog.entry_time).all()
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['ID', 'Name', 'Visitor ID', 'Role', 'Entry Time', 'Activity'])
+        
+        for log in logs:
+            writer.writerow([
+                log.id,
+                log.visitor_name,
+                log.visitor_id,
+                log.role,
+                log.entry_time.strftime('%Y-%m-%d %H:%M:%S'),
+                log.activity
+            ])
+    
+    print(f"Exported {len(logs)} log entries to {filename}")
+
+# Export last month's data
+end_date = datetime.utcnow()
+start_date = end_date - timedelta(days=30)
+export_logs_to_csv('library_logs_30days.csv', start_date, end_date)
+```
+
+### Checking Visitor History
+
+```python
+def get_visitor_history(visitor_id):
+    """Get all visits for a specific visitor"""
+    visits = LibraryLog.query.filter_by(
+        visitor_id=visitor_id
+    ).order_by(LibraryLog.entry_time.desc()).all()
+    
+    if visits:
+        print(f"Visit history for {visits[0].visitor_name}:")
+        for visit in visits:
+            print(f"  {visit.entry_time.strftime('%Y-%m-%d %H:%M')} - {visit.activity}")
+    else:
+        print(f"No visits found for visitor ID: {visitor_id}")
+    
+    return visits
+
+history = get_visitor_history('1234567890')
+```
+
+## Common Query Patterns
+
+### Filter by Multiple Criteria
+
+```python
+# Students who came for study in the last week
+week_ago = datetime.utcnow() - timedelta(days=7)
+student_study = LibraryLog.query.filter(
+    LibraryLog.role == 'estudiante',
+    LibraryLog.activity == 'estudio',
+    LibraryLog.entry_time >= week_ago
+).all()
+```
+
+### Time-based Filtering
+
+```python
+from sqlalchemy import and_, or_
+
+# Entries between 9 AM and 5 PM
+morning = datetime.utcnow().replace(hour=9, minute=0, second=0)
+evening = datetime.utcnow().replace(hour=17, minute=0, second=0)
+
+business_hours = LibraryLog.query.filter(
+    and_(
+        LibraryLog.entry_time >= morning,
+        LibraryLog.entry_time <= evening
+    )
+).all()
+```
+
+## Use Cases
+
+1. **Occupancy Tracking**: Monitor current library capacity
+2. **Usage Statistics**: Analyze library usage patterns over time
+3. **Activity Analysis**: Understand what visitors do in the library
+4. **Peak Hours**: Identify busiest times for staffing decisions
+5. **Visitor Demographics**: Track visitor roles and frequencies
+6. **Reporting**: Generate daily, weekly, or monthly reports
+7. **Compliance**: Maintain visitor logs for security purposes
+
+## Best Practices
+
+- Log entries should be created at check-in time
+- Use consistent role and activity values across the system
+- Implement data retention policies (e.g., archive logs older than 1 year)
+- Consider timezone conversion for local time displays
+- Aggregate data regularly for performance on large datasets

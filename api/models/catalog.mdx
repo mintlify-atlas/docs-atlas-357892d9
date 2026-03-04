@@ -1,0 +1,158 @@
+---
+title: 'Catalog Model'
+description: 'Catalog model representing generic items available in the library'
+---
+
+## Overview
+
+The `Catalog` model represents the generic definition of items available in the library system. It serves as the template or blueprint for physical items, storing information like title, category, and author/brand. Each catalog entry can have multiple physical instances (ItemInstance).
+
+## Fields
+
+<ParamField path="id" type="Integer" required>
+  Primary key identifier for the catalog entry
+</ParamField>
+
+<ParamField path="title_or_name" type="String(150)" required>
+  The title of the book or name of the equipment. Required field with maximum 150 characters.
+</ParamField>
+
+<ParamField path="category" type="String(50)" required>
+  Category of the item (e.g., 'libro', 'equipo', 'revista'). Required field with maximum 50 characters.
+</ParamField>
+
+<ParamField path="author_or_brand" type="String(100)">
+  Author name for books or brand name for equipment. Optional field with maximum 100 characters.
+</ParamField>
+
+## Relationships
+
+### instances
+
+Relationship to all physical instances of this catalog item.
+
+- **Type:** Dynamic relationship to `ItemInstance` model
+- **Backref:** `catalog_item` (accessible from ItemInstance)
+- **Cascade:** `all, delete-orphan` - deleting a catalog entry removes all its instances
+- **Access:** `catalog.instances.all()` or `catalog.instances.filter_by(status='disponible')`
+
+## Usage Examples
+
+### Creating a New Catalog Entry
+
+```python
+from app.models import Catalog
+from app import db
+
+# Create a book catalog entry
+book = Catalog(
+    title_or_name='Clean Code: A Handbook of Agile Software Craftsmanship',
+    category='libro',
+    author_or_brand='Robert C. Martin'
+)
+db.session.add(book)
+db.session.commit()
+
+# Create an equipment catalog entry
+equipment = Catalog(
+    title_or_name='Arduino Uno R3',
+    category='equipo',
+    author_or_brand='Arduino'
+)
+db.session.add(equipment)
+db.session.commit()
+```
+
+### Querying Catalog Items
+
+```python
+from app.models import Catalog
+
+# Get all books
+books = Catalog.query.filter_by(category='libro').all()
+
+# Search by title
+results = Catalog.query.filter(
+    Catalog.title_or_name.contains('Python')
+).all()
+
+# Get catalog with specific author
+author_books = Catalog.query.filter_by(
+    author_or_brand='Robert C. Martin'
+).all()
+```
+
+### Accessing Instances
+
+```python
+catalog = Catalog.query.get(catalog_id)
+
+# Get all instances
+all_instances = catalog.instances.all()
+
+# Get available instances
+available = catalog.instances.filter_by(status='disponible').all()
+
+# Count total instances
+total_count = catalog.instances.count()
+available_count = catalog.instances.filter_by(status='disponible').count()
+```
+
+### Updating Catalog Information
+
+```python
+catalog = Catalog.query.get(catalog_id)
+catalog.title_or_name = 'Updated Title'
+catalog.author_or_brand = 'New Author Name'
+db.session.commit()
+```
+
+### Deleting a Catalog Entry
+
+```python
+catalog = Catalog.query.get(catalog_id)
+
+# This will also delete all associated instances due to cascade
+db.session.delete(catalog)
+db.session.commit()
+```
+
+## Common Query Patterns
+
+### Get Catalog with Availability Information
+
+```python
+from app.models import Catalog, ItemInstance
+from sqlalchemy import func
+
+# Get catalogs with instance counts
+catalogs = db.session.query(
+    Catalog,
+    func.count(ItemInstance.id).label('total_instances')
+).outerjoin(ItemInstance).group_by(Catalog.id).all()
+
+for catalog, count in catalogs:
+    print(f"{catalog.title_or_name}: {count} instances")
+```
+
+### Filter by Category
+
+```python
+# Get all equipment
+equipment_list = Catalog.query.filter_by(category='equipo').all()
+
+# Get all books
+book_list = Catalog.query.filter_by(category='libro').all()
+```
+
+## Design Pattern
+
+The Catalog model follows the **Type-Object pattern**:
+- **Catalog**: Defines the "type" or template (generic item information)
+- **ItemInstance**: Represents the "object" or physical manifestation
+
+This allows the library to:
+1. Maintain single source of truth for item metadata
+2. Track multiple physical copies of the same item
+3. Update item information in one place
+4. Manage availability at the instance level

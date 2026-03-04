@@ -1,0 +1,220 @@
+---
+title: "InventoryService"
+description: "Service layer for managing physical inventory and item instances"
+---
+
+The `InventoryService` class handles transactional operations for physical item instances, including reservations and releases with proper concurrency control.
+
+## Methods
+
+### reserve_instances
+
+Atomically reserves a specified quantity of available item instances.
+
+<ParamField path="catalog_id" type="int" required>
+  The ID of the catalog item to reserve instances from
+</ParamField>
+
+<ParamField path="quantity" type="int" required>
+  Number of instances to reserve
+</ParamField>
+
+<ResponseField name="result" type="tuple[bool, list[int], str]">
+  Returns a tuple containing:
+  - `bool`: Success status
+  - `list[int]`: List of reserved instance IDs
+  - `str`: Result message
+</ResponseField>
+
+**Concurrency Control:**
+- Uses `with_for_update(skip_locked=True)` for pessimistic locking
+- Prevents race conditions when multiple users request same items
+- Automatically rolls back on `OperationalError` (concurrency conflicts)
+
+**Business Logic:**
+1. Validates catalog exists
+2. Locks and retrieves available instances up to requested quantity
+3. Changes status from 'disponible' to 'prestado'
+4. Returns list of reserved instance IDs for loan creation
+
+**Example:**
+```python
+from app.services.inventory_service import InventoryService
+
+success, reserved_ids, msg = InventoryService.reserve_instances(
+    catalog_id=42,
+    quantity=2
+)
+
+if not success:
+    flash(msg, 'warning')
+    return redirect(url_for('main.fast_loan'))
+    
+try:
+    for inst_id in reserved_ids:
+        LoanService.create_loan(user_id=user_id, instance_id=inst_id)
+    db.session.commit()
+    flash('Préstamo rápido registrado con éxito.', 'success')
+except Exception as e:
+    db.session.rollback()
+    flash('Error al procesar la solicitud.', 'danger')
+```
+
+**Error Messages:**
+- `"Catálogo no encontrado."` - Invalid catalog_id
+- `"Stock físico insuficiente o temporalmente bloqueado por otra transacción."` - Not enough available instances
+- `"El sistema está procesando otra solicitud para este ítem. Intente nuevamente."` - Concurrency conflict detected
+- `"Error interno al procesar el inventario."` - Unexpected database error
+- `"Instancias reservadas exitosamente."` - Success
+
+**Source Reference:** `app/services/inventory_service.py:9`
+
+---
+
+### release_instance
+
+Releases a single instance back to available inventory.
+
+<ParamField path="instance_id" type="int" required>
+  The ID of the instance to release
+</ParamField>
+
+<ResponseField name="result" type="tuple[bool, str]">
+  Returns a tuple containing:
+  - `bool`: Success status
+  - `str`: Result message
+</ResponseField>
+
+**Business Logic:**
+- Validates instance exists
+- Sets status to 'disponible'
+- Does NOT commit - caller must handle transaction
+
+**Example:**
+```python
+success, msg = InventoryService.release_instance(loan.instance_id)
+
+if success:
+    db.session.commit()
+    flash('Ítem devuelto y reingresado al inventario con éxito.', 'success')
+else:
+    db.session.rollback()
+    flash(f'Error al liberar inventario: {msg}', 'danger')
+```
+
+**Error Messages:**
+- `"Instancia física no encontrada."` - Invalid instance_id
+- `"Instancia liberada y devuelta al inventario."` - Success
+
+**Source Reference:** `app/services/inventory_service.py:39`
+
+---
+
+## CatalogService
+
+The `CatalogService` class provides optimized queries for catalog items with availability counts, solving N+1 query problems.
+
+### get_catalog_with_counts
+
+Returns catalog items with dynamically injected availability counts (no pagination).
+
+<ParamField path="category_filter" type="str" default="None">
+  Filter by specific category (e.g., 'computo', 'libro')
+</ParamField>
+
+<ParamField path="exclude_category" type="str" default="None">
+  Exclude specific category from results
+</ParamField>
+
+<ResponseField name="items" type="list[Catalog]">
+  List of Catalog objects with `available_count` attribute dynamically injected
+</ResponseField>
+
+**Performance Optimization:**
+- Uses single JOIN query instead of N+1 queries
+- Groups by catalog ID and counts available instances
+- Dynamically injects `available_count` attribute to maintain frontend compatibility
+
+**Example:**
+```python
+from app.services.inventory_service import CatalogService
+
+# Get all items excluding 'general' category for premium users
+available_computers = CatalogService.get_catalog_with_counts(
+    category_filter='computo'
+)
+
+# Use in form choices
+form.catalog_id.choices = [
+    (i.id, f"{i.title_or_name} (Disponibles: {i.available_count})")
+    for i in available_computers
+    if i.available_count > 0
+]
+```
+
+**Source Reference:** `app/services/inventory_service.py:49`
+
+---
+
+### get_paginated_catalog
+
+Returns paginated catalog items with availability counts.
+
+<ParamField path="page" type="int" required>
+  Current page number
+</ParamField>
+
+<ParamField path="per_page" type="int" default="12">
+  Number of items per page
+</ParamField>
+
+<ParamField path="category_filter" type="str" default="None">
+  Filter by specific category
+</ParamField>
+
+<ParamField path="exclude_category" type="str" default="None">
+  Exclude specific category from results
+</ParamField>
+
+<ResponseField name="pagination" type="Pagination">
+  Flask-SQLAlchemy Pagination object with:
+  - `items`: List of Catalog objects with `available_count` injected
+  - `page`: Current page number
+  - `pages`: Total number of pages
+  - `total`: Total number of items
+  - `has_prev`, `has_next`: Boolean navigation flags
+</ResponseField>
+
+**Performance Optimization:**
+- Single optimized query with JOIN and GROUP BY
+- Prevents N+1 queries when displaying catalog lists
+- Maintains pagination metadata
+
+**Example:**
+```python
+pagination = CatalogService.get_paginated_catalog(
+    page=1,
+    per_page=12,
+    exclude_category='general'
+)
+
+for item in pagination.items:
+    print(f"{item.title_or_name}: {item.available_count} available")
+```
+
+**Template Usage:**
+```html
+{% for item in pagination.items %}
+  <div class="item">
+    <h3>{{ item.title_or_name }}</h3>
+    <p>Available: {{ item.available_count }}</p>
+  </div>
+{% endfor %}
+
+<!-- Pagination controls -->
+{% if pagination.has_prev %}
+  <a href="{{ url_for('main.catalog', page=pagination.prev_num) }}">Previous</a>
+{% endif %}
+```
+
+**Source Reference:** `app/services/inventory_service.py:75`

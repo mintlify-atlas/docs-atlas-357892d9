@@ -1,0 +1,238 @@
+---
+title: 'ItemInstance Model'
+description: 'ItemInstance model representing physical items in the library inventory'
+---
+
+## Overview
+
+The `ItemInstance` model represents the actual physical objects in the library. While the Catalog model defines what an item is, ItemInstance tracks individual copies with unique identifiers, status, and condition. This allows the library to manage multiple copies of the same book or equipment.
+
+## Fields
+
+<ParamField path="id" type="Integer" required>
+  Primary key identifier for the item instance
+</ParamField>
+
+<ParamField path="catalog_id" type="Integer" required>
+  Foreign key reference to the Catalog entry. Links this physical instance to its catalog definition.
+</ParamField>
+
+<ParamField path="unique_code" type="String(50)" required>
+  Unique identifier code for this physical item (e.g., barcode, QR code, serial number). Must be unique across all instances.
+</ParamField>
+
+<ParamField path="status" type="String(20)" default="disponible">
+  Current status of the item. Possible values:
+  - `disponible`: Available for loan
+  - `prestado`: Currently loaned out
+  - `mantenimiento`: Under maintenance
+  - `perdido`: Lost or missing
+</ParamField>
+
+<ParamField path="condition" type="String(100)">
+  Description of the physical condition of the item (e.g., 'excellent', 'good', 'worn', 'damaged'). Optional field.
+</ParamField>
+
+## Relationships
+
+### catalog_item
+
+Back reference to the parent Catalog entry.
+
+- **Type:** Many-to-one relationship with `Catalog` model
+- **Access:** `instance.catalog_item.title_or_name`
+- **Description:** Provides access to the catalog metadata (title, author, category)
+
+### loans
+
+Relationship to all loan records for this instance.
+
+- **Type:** Dynamic relationship to `Loan` model
+- **Backref:** `item_instance` (accessible from Loan)
+- **Access:** `instance.loans.all()` or `instance.loans.filter_by(status='activo')`
+
+## Usage Examples
+
+### Creating Item Instances
+
+```python
+from app.models import Catalog, ItemInstance
+from app import db
+
+# Get the catalog entry
+catalog = Catalog.query.filter_by(
+    title_or_name='Clean Code'
+).first()
+
+# Create multiple instances of the same book
+instance1 = ItemInstance(
+    catalog_id=catalog.id,
+    unique_code='BOOK-CC-001',
+    status='disponible',
+    condition='excellent'
+)
+
+instance2 = ItemInstance(
+    catalog_id=catalog.id,
+    unique_code='BOOK-CC-002',
+    status='disponible',
+    condition='good'
+)
+
+db.session.add_all([instance1, instance2])
+db.session.commit()
+```
+
+### Querying Available Instances
+
+```python
+from app.models import ItemInstance
+
+# Get all available instances
+available = ItemInstance.query.filter_by(status='disponible').all()
+
+# Find instance by unique code
+instance = ItemInstance.query.filter_by(unique_code='BOOK-CC-001').first()
+
+# Get instances for a specific catalog
+catalog_instances = ItemInstance.query.filter_by(
+    catalog_id=catalog_id
+).all()
+```
+
+### Updating Instance Status
+
+```python
+# Mark as loaned
+instance = ItemInstance.query.filter_by(unique_code=code).first()
+instance.status = 'prestado'
+db.session.commit()
+
+# Return item
+instance.status = 'disponible'
+db.session.commit()
+
+# Mark for maintenance
+instance.status = 'mantenimiento'
+instance.condition = 'needs repair - torn pages'
+db.session.commit()
+```
+
+### Accessing Catalog Information
+
+```python
+instance = ItemInstance.query.get(instance_id)
+
+# Access catalog details through relationship
+title = instance.catalog_item.title_or_name
+author = instance.catalog_item.author_or_brand
+category = instance.catalog_item.category
+
+print(f"Item: {title} by {author}")
+print(f"Code: {instance.unique_code}")
+print(f"Status: {instance.status}")
+```
+
+### Checking Loan History
+
+```python
+instance = ItemInstance.query.get(instance_id)
+
+# Get all loans for this instance
+all_loans = instance.loans.all()
+
+# Get active loan
+active_loan = instance.loans.filter_by(status='activo').first()
+
+# Check if currently loaned
+is_loaned = instance.status == 'prestado'
+
+if is_loaned and active_loan:
+    print(f"Loaned to: {active_loan.requester.full_name}")
+    print(f"Due date: {active_loan.due_date}")
+```
+
+### Finding Available Copies
+
+```python
+from app.models import Catalog, ItemInstance
+
+# Find available instances for a specific catalog item
+catalog = Catalog.query.filter_by(title_or_name='Python Crash Course').first()
+available_copies = catalog.instances.filter_by(status='disponible').all()
+
+if available_copies:
+    print(f"{len(available_copies)} copies available")
+    for copy in available_copies:
+        print(f"  - Code: {copy.unique_code}, Condition: {copy.condition}")
+else:
+    print("No copies available")
+```
+
+### Bulk Status Update
+
+```python
+# Mark all instances of a catalog as unavailable (e.g., for inventory)
+catalog = Catalog.query.get(catalog_id)
+for instance in catalog.instances:
+    if instance.status == 'disponible':
+        instance.status = 'mantenimiento'
+db.session.commit()
+```
+
+### Inventory Report
+
+```python
+from app.models import ItemInstance
+from sqlalchemy import func
+
+# Get count by status
+status_counts = db.session.query(
+    ItemInstance.status,
+    func.count(ItemInstance.id)
+).group_by(ItemInstance.status).all()
+
+for status, count in status_counts:
+    print(f"{status}: {count} items")
+```
+
+## Status Management Best Practices
+
+### Status Transitions
+
+```python
+def loan_instance(instance_id, loan_id):
+    """Mark instance as loaned"""
+    instance = ItemInstance.query.get(instance_id)
+    if instance.status == 'disponible':
+        instance.status = 'prestado'
+        db.session.commit()
+        return True
+    return False
+
+def return_instance(instance_id):
+    """Mark instance as returned"""
+    instance = ItemInstance.query.get(instance_id)
+    if instance.status == 'prestado':
+        instance.status = 'disponible'
+        db.session.commit()
+        return True
+    return False
+
+def mark_lost(instance_id):
+    """Mark instance as lost"""
+    instance = ItemInstance.query.get(instance_id)
+    instance.status = 'perdido'
+    db.session.commit()
+```
+
+## Unique Code Format Examples
+
+```python
+# Common formats for unique_code:
+# - Books: "BOOK-{ABBR}-{NUMBER}" (e.g., "BOOK-CC-001")
+# - Equipment: "EQUIP-{TYPE}-{NUMBER}" (e.g., "EQUIP-ARD-042")
+# - Magazines: "MAG-{YEAR}-{ISSUE}" (e.g., "MAG-2024-03")
+# - Barcodes: Use actual barcode number
+# - QR Codes: Use encoded identifier
+```

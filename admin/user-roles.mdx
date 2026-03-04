@@ -1,0 +1,295 @@
+---
+title: User Roles
+description: Understand the role-based access control system in SWL Library Management System
+---
+
+The SWL Library Management System implements a role-based access control (RBAC) system with four distinct user roles, each with specific permissions and capabilities.
+
+## Role Definitions
+
+Roles are defined in `config.py:31-36` as part of the `USER_ROLES` dictionary:
+
+```python
+USER_ROLES = {
+    'admin': 'Administrador del Sistema',
+    'bibliotecario': 'Bibliotecario / Staff',
+    'premium': 'Usuario Premium',
+    'cliente': 'Estudiante / Cliente Regular'
+}
+```
+
+### Admin (Administrador del Sistema)
+
+**Full system administrator with complete control over all features.**
+
+**Key Responsibilities**:
+- System configuration and maintenance
+- User management (create, edit, delete all users)
+- Catalog and inventory management
+- Access to all administrative functions
+- View all reports and analytics
+
+**Unique Permissions**:
+- Create and manage staff accounts (`bibliotecario` role)
+- System-wide configuration changes
+- Access to sensitive operations
+- Full CRUD operations on all resources
+
+**Route Protection**: `@role_required('admin')` (see `app/admin/routes.py:16`)
+
+### Bibliotecario (Bibliotecario / Staff)
+
+**Library staff responsible for day-to-day operations.**
+
+**Key Responsibilities**:
+- Loan approval and management
+- Inventory status updates
+- Item check-in and check-out
+- Basic user assistance
+- Library usage logging
+
+**Permissions**:
+- Approve/reject loan requests
+- Update loan status (approve, return, reject)
+- Modify item instance status
+- View and manage active loans
+- Access staff dashboard
+
+**Restrictions**:
+- Cannot create admin accounts
+- Cannot modify system configuration
+- Limited to operational tasks
+
+**Route Protection**: `@role_required('bibliotecario', 'admin')` (shared access with admin)
+
+### Premium (Usuario Premium)
+
+**Advanced users with access to premium inventory items (instructors, faculty).**
+
+**Key Responsibilities**:
+- Request premium category items
+- Extended borrowing privileges
+- Access to specialized equipment
+
+**Permissions**:
+- Request loans for all item categories:
+  - General items (Mouse USB, etc.)
+  - Premium items (VideoBeam, HDMI cables, TVs, LEGO kits)
+- View personal loan history
+- Track active loans
+- Manage profile information
+
+**Route Protection**: `@role_required('premium', 'cliente')` (see `app/main/routes.py:105`)
+
+### Cliente (Estudiante / Cliente Regular)
+
+**Regular users with standard borrowing privileges (students).**
+
+**Key Responsibilities**:
+- Request loans for general items
+- Return items on time
+- Pay penalties if applicable
+
+**Permissions**:
+- Request loans (general category only)
+- View personal loan history
+- Track active loans
+- Manage profile information
+
+**Restrictions**:
+- Cannot access premium category items
+- No administrative capabilities
+- Limited to self-service operations
+
+**Route Protection**: `@role_required('premium', 'cliente')` (shared with premium users)
+
+## Permission Matrix
+
+| Feature | Admin | Bibliotecario | Premium | Cliente |
+|---------|-------|---------------|---------|----------|
+| **User Management** |
+| Create users | ✓ | ✗ | ✗ | ✗ |
+| Edit users | ✓ | ✗ | Self only | Self only |
+| Delete users | ✓ | ✗ | ✗ | ✗ |
+| View all users | ✓ | ✗ | ✗ | ✗ |
+| **Catalog Management** |
+| Add catalog items | ✓ | ✗ | ✗ | ✗ |
+| Edit catalog items | ✓ | ✗ | ✗ | ✗ |
+| Delete catalog items | ✓ | ✗ | ✗ | ✗ |
+| View catalog | ✓ | ✓ | ✓ | ✓ |
+| **Inventory Management** |
+| Add item instances | ✓ | ✗ | ✗ | ✗ |
+| Update item status | ✓ | ✓ | ✗ | ✗ |
+| Manage inventory | ✓ | ✓ | ✗ | ✗ |
+| **Loan Management** |
+| Request loans (general) | ✓ | ✓ | ✓ | ✓ |
+| Request loans (premium) | ✓ | ✓ | ✓ | ✗ |
+| Approve/reject loans | ✓ | ✓ | ✗ | ✗ |
+| Process returns | ✓ | ✓ | ✗ | ✗ |
+| View all loans | ✓ | ✓ | ✗ | ✗ |
+| View own loans | ✓ | ✓ | ✓ | ✓ |
+| **Library Logs** |
+| Record visits | ✓ | ✓ | ✗ | ✗ |
+| View logs | ✓ | ✓ | ✗ | ✗ |
+| **Reports & Analytics** |
+| Generate reports | ✓ | ✗ | ✗ | ✗ |
+| View statistics | ✓ | ✓ | ✗ | ✗ |
+
+## Role Assignment
+
+### During User Creation
+
+Roles are assigned when creating user accounts. The role field is stored in the `User` model:
+
+```python
+role = db.Column(db.String(20), nullable=False)
+```
+
+**Location**: `app/models.py:18`
+
+### Default Admin Account
+
+A default admin account is created on first startup:
+
+```python
+# Default admin credentials (CHANGE IMMEDIATELY)
+Document ID: 1000000000
+Password: admin123
+Role: admin
+Email: admin@biblioteca.com
+```
+
+**Location**: `run.py:10-21`
+
+<Warning>
+  **CRITICAL**: Change the default admin password immediately after first login. The default credentials are publicly known and pose a severe security risk.
+</Warning>
+
+## Role Enforcement
+
+### Decorator-Based Protection
+
+Routes are protected using the `@role_required` decorator (`app/utils/decorators.py:5`):
+
+```python
+from app.utils.decorators import role_required
+
+@bp.route('/admin/users')
+@login_required
+@role_required('admin')
+def manage_users():
+    # Only accessible by admin role
+    pass
+
+@bp.route('/loans/approve')
+@login_required
+@role_required('bibliotecario', 'admin')
+def approve_loan():
+    # Accessible by bibliotecario OR admin
+    pass
+```
+
+### Access Denial Handling
+
+When a user attempts to access a restricted route (`app/utils/decorators.py:18-27`):
+
+1. **Unauthenticated users**: Redirected to login page
+2. **Insufficient permissions**: Flash error message and redirect based on role:
+   - `bibliotecario` → Admin dashboard
+   - `premium` → Premium dashboard  
+   - `cliente` → Main index
+
+## Role Assignment Best Practices
+
+### Security Principles
+
+1. **Principle of Least Privilege**
+   - Assign the minimum role needed for job function
+   - Regularly audit user roles
+   - Remove unnecessary elevated permissions
+
+2. **Role Segregation**
+   - Don't use admin accounts for routine operations
+   - Create separate bibliotecario accounts for staff
+   - Limit admin role to actual system administrators
+
+3. **Account Lifecycle**
+   - Review roles during user onboarding
+   - Downgrade or deactivate accounts when users change roles
+   - Delete accounts for users who leave the organization
+
+### Recommended Role Assignments
+
+| User Type | Recommended Role | Justification |
+|-----------|------------------|---------------|
+| System Administrator | `admin` | Full system management |
+| Library Staff | `bibliotecario` | Daily operations |
+| Instructors/Faculty | `premium` | Access to premium equipment |
+| Students | `cliente` | Standard borrowing |
+
+### Admin Account Security
+
+<Warning>
+  Admin accounts have complete system control. Secure them with:
+  - Strong, unique passwords
+  - Regular password rotation
+  - Limited to 1-2 accounts maximum
+  - Audit logging of admin actions
+  - Two-factor authentication (if implemented)
+</Warning>
+
+### Creating Role-Specific Accounts
+
+**Admin Creation** (admin only):
+```python
+admin_user = User(
+    document_id='unique_id',
+    full_name='Admin Name',
+    role='admin',
+    email='admin@example.com'
+)
+```
+
+**Staff Creation** (admin only):
+```python
+staff_user = User(
+    document_id='unique_id',
+    full_name='Staff Name',
+    role='bibliotecario',
+    email='staff@example.com'
+)
+```
+
+**Premium User Creation**:
+```python
+premium_user = User(
+    document_id='unique_id',
+    full_name='Instructor Name',
+    role='premium',
+    program_name='Engineering Department'
+)
+```
+
+**Regular User Creation**:
+```python
+client_user = User(
+    document_id='student_id',
+    full_name='Student Name',
+    role='cliente',
+    program_name='Computer Science'
+)
+```
+
+## Role Validation
+
+The system validates roles during:
+
+1. **Login** - Verifies role exists and is valid
+2. **Route Access** - Checks role permissions via decorator
+3. **Business Logic** - Applies role-specific rules (e.g., premium item access)
+
+## See Also
+
+- [Configuration](/admin/configuration) - Role configuration settings
+- [Database Setup](/admin/database-setup) - User table schema
+- [Deployment](/admin/deployment) - Production security considerations

@@ -1,0 +1,224 @@
+---
+title: Configuration
+description: Configure the SWL Library Management System with environment variables and application settings
+---
+
+The SWL Library Management System uses environment variables and a centralized configuration file to manage application settings. All configuration is handled through `config.py`.
+
+## Environment Variables
+
+### Security Settings
+
+#### SECRET_KEY
+
+**Required for production**
+
+The secret key is used for session management, CSRF protection, and other security features.
+
+```python
+SECRET_KEY=your-secure-random-key-here
+```
+
+<Warning>
+  Never use the default development key in production. Generate a secure random key using:
+  ```bash
+  python -c "import secrets; print(secrets.token_hex(32))"
+  ```
+</Warning>
+
+**Default**: `'clave-secreta-para-desarrollo'` (development only)
+
+**Location**: `config.py:6`
+
+### Database Configuration
+
+#### DATABASE_URL
+
+Specifies the database connection string. The system supports both SQLite and PostgreSQL.
+
+```bash
+# PostgreSQL (recommended for production)
+DATABASE_URL=postgresql://username:password@localhost/library_db
+
+# SQLite (default for development)
+# If not set, uses: sqlite:///instance/app.db
+```
+
+**Default**: `sqlite:///instance/app.db`
+
+**Location**: `config.py:10-11`
+
+<Note>
+  PostgreSQL is strongly recommended for production deployments due to better concurrency handling and performance.
+</Note>
+
+### Business Parameters
+
+#### PENALTY_FEE_PER_DAY
+
+Defines the daily penalty fee (in currency units) charged for overdue book loans.
+
+```bash
+PENALTY_FEE_PER_DAY=5000.0
+```
+
+**Default**: `5000.0`
+
+**Type**: Float
+
+**Location**: `config.py:21`
+
+**Usage**: This value is used in the `Loan.penalty_fee` property (`models.py:89`) to calculate late fees for overdue books.
+
+### Scheduler Configuration
+
+#### SCHEDULER_TIMEZONE
+
+Sets the timezone for scheduled tasks (e.g., overdue loan checks).
+
+```python
+SCHEDULER_TIMEZONE="America/Bogota"
+```
+
+**Default**: `"America/Bogota"`
+
+**Location**: `config.py:15`
+
+**Scheduled Tasks**:
+- Overdue loan check runs daily at 00:01 AM (`app/__init__.py:34`)
+- Uses APScheduler with cron triggers
+
+#### SCHEDULER_API_ENABLED
+
+Controls whether the scheduler API endpoints are exposed.
+
+```python
+SCHEDULER_API_ENABLED=False
+```
+
+**Default**: `False`
+
+**Location**: `config.py:14`
+
+<Warning>
+  Keep this disabled in production unless you specifically need programmatic scheduler control.
+</Warning>
+
+### Session Configuration
+
+#### PERMANENT_SESSION_LIFETIME
+
+Defines how long user sessions remain active.
+
+```python
+PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
+```
+
+**Default**: 30 minutes
+
+**Location**: `config.py:17`
+
+**Note**: Sessions are made permanent by default in `app/__init__.py:60-61`
+
+### Application Identity
+
+#### APP_NAME
+
+The application display name used throughout the interface.
+
+```bash
+APP_NAME="SWL"
+```
+
+**Default**: `"SWL"`
+
+**Location**: `config.py:27`
+
+#### LIBRARY_NAME
+
+The library institution name.
+
+```bash
+LIBRARY_NAME="SWL"
+```
+
+**Default**: `"SWL"`
+
+**Location**: `config.py:28`
+
+### Logging Configuration
+
+#### LOG_FILE
+
+Path to the application log file.
+
+**Default**: `logs/library.log`
+
+**Location**: `config.py:24`
+
+**Log Rotation Settings** (`app/__init__.py:49`):
+- Maximum file size: 1MB
+- Backup count: 3 files
+- Format: `%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]`
+
+## Database Configuration Details
+
+### SQLAlchemy Settings
+
+```python
+SQLALCHEMY_TRACK_MODIFICATIONS=False
+```
+
+**Default**: `False`
+
+**Location**: `config.py:12`
+
+Disables Flask-SQLAlchemy event system to save memory.
+
+## Example Configuration Files
+
+### Development (.env)
+
+```bash
+# Development configuration
+SECRET_KEY=dev-key-change-in-production
+DATABASE_URL=sqlite:///instance/app.db
+PENALTY_FEE_PER_DAY=5000.0
+SCHEDULER_TIMEZONE=America/Bogota
+```
+
+### Production (.env)
+
+```bash
+# Production configuration
+SECRET_KEY=<generate-secure-key>
+DATABASE_URL=postgresql://library_user:secure_password@localhost/library_production
+PENALTY_FEE_PER_DAY=5000.0
+SCHEDULER_TIMEZONE=America/Bogota
+```
+
+<Warning>
+  Production environment files should:
+  - Never be committed to version control
+  - Have restricted file permissions (600)
+  - Use strong, unique values for all secrets
+  - Use PostgreSQL instead of SQLite
+</Warning>
+
+## Configuration Class Structure
+
+All configuration is centralized in the `Config` class (`config.py:4`):
+
+```python
+from config import Config
+
+app = create_app(config_class=Config)
+```
+
+The configuration is loaded during application factory initialization in `app/__init__.py:21`.
+
+## See Also
+
+- [Database Setup](/admin/database-setup) - Database initialization and migration
+- [Deployment](/admin/deployment) - Production deployment guide
+- [User Roles](/admin/user-roles) - Role configuration and permissions

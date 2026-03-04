@@ -1,0 +1,244 @@
+---
+title: "Authentication Routes"
+description: "User authentication endpoints for login, registration, and logout"
+---
+
+Authentication routes handle user login, registration, and logout functionality using Flask-Login.
+
+## Endpoints
+
+### POST /auth/login
+
+Authenticates a user and creates a session.
+
+**Blueprint:** `auth`  
+**Methods:** `GET`, `POST`  
+**Template:** `auth/login.html`  
+**Login Required:** No
+
+#### Form Fields
+
+<ParamField path="document_id" type="str" required>
+  User's document ID (used as username)
+</ParamField>
+
+<ParamField path="password" type="str" required>
+  User's password
+</ParamField>
+
+#### Response Behavior
+
+**On Success:**
+- Creates authenticated session using Flask-Login
+- Redirects based on user role:
+  - `admin` → `admin.manage_users`
+  - `bibliotecario` → `admin.admin_dashboard`
+  - `premium`, `cliente` → `main.premium_dashboard`
+  - Other roles → `main.index`
+
+**On Failure:**
+- Flash message: `"Documento o contraseña inválidos."`
+- Re-renders login form
+
+#### Example
+
+```python
+# Using WTForms in template
+<form method="POST">
+    {{ form.hidden_tag() }}
+    {{ form.document_id.label }} {{ form.document_id }}
+    {{ form.password.label }} {{ form.password }}
+    <button type="submit">Login</button>
+</form>
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://localhost:5000/auth/login \
+  -F "document_id=123456789" \
+  -F "password=secretpass" \
+  -F "csrf_token=your-token-here"
+```
+
+**Authentication Logic:**
+```python
+user = User.query.filter_by(document_id=form.document_id.data).first()
+
+if user is None or not user.check_password(form.password.data):
+    flash('Documento o contraseña inválidos.', 'danger')
+    return render_template('auth/login.html', form=form)
+
+login_user(user, remember=False)
+```
+
+**Source Reference:** `app/auth/routes.py:8`
+
+---
+
+### POST /auth/register
+
+Registers a new user account.
+
+**Blueprint:** `auth`  
+**Methods:** `GET`, `POST`  
+**Template:** `auth/register.html`  
+**Login Required:** No
+
+#### Form Fields
+
+<ParamField path="full_name" type="str" required>
+  User's full name
+</ParamField>
+
+<ParamField path="document_id" type="str" required>
+  Unique document ID (must not exist in system)
+</ParamField>
+
+<ParamField path="email" type="str" required>
+  Email address (must be unique)
+</ParamField>
+
+<ParamField path="phone" type="str" required>
+  Phone number
+</ParamField>
+
+<ParamField path="role" type="str" required>
+  User role: 'cliente', 'premium', 'bibliotecario', or 'admin'
+</ParamField>
+
+<ParamField path="program_name" type="str">
+  Required only if role is 'cliente' - academic program name
+</ParamField>
+
+<ParamField path="password" type="str" required>
+  Password (will be hashed before storage)
+</ParamField>
+
+#### Validation Rules
+
+- Document ID must be unique
+- Email must be unique
+- `program_name` required only for 'cliente' role
+- Password is hashed using `user.set_password()` before storage
+
+#### Response Behavior
+
+**On Success:**
+- User created and saved to database
+- Flash message: `"¡Registro exitoso! Ahora puede iniciar sesión con su número de documento."`
+- Redirects to login page
+
+**On Duplicate Document:**
+- Flash message: `"El número de documento ya está registrado."`
+- Re-renders registration form
+
+**On Duplicate Email:**
+- Flash message: `"La dirección de correo electrónico ya está registrada."`
+- Re-renders registration form
+
+#### Example
+
+```python
+# Registration logic
+if User.query.filter_by(document_id=form.document_id.data).first():
+    flash('El número de documento ya está registrado.', 'warning')
+    return render_template('auth/register.html', form=form)
+
+if User.query.filter_by(email=form.email.data).first():
+    flash('La dirección de correo electrónico ya está registrada.', 'warning')
+    return render_template('auth/register.html', form=form)
+
+user = User(
+    full_name=form.full_name.data,
+    document_id=form.document_id.data,
+    email=form.email.data,
+    phone=form.phone.data,
+    role=form.role.data
+)
+
+if form.role.data == 'cliente':
+    user.program_name = form.program_name.data
+
+user.set_password(form.password.data)
+db.session.add(user)
+db.session.commit()
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://localhost:5000/auth/register \
+  -F "full_name=Juan Pérez" \
+  -F "document_id=987654321" \
+  -F "email=juan@example.com" \
+  -F "phone=3001234567" \
+  -F "role=cliente" \
+  -F "program_name=Ingeniería de Sistemas" \
+  -F "password=securepass123" \
+  -F "csrf_token=your-token-here"
+```
+
+**Source Reference:** `app/auth/routes.py:35`
+
+---
+
+### GET /auth/logout
+
+Logs out the current user and destroys the session.
+
+**Blueprint:** `auth`  
+**Methods:** `GET`  
+**Login Required:** No (but only effective if logged in)
+
+#### Response Behavior
+
+- Calls `logout_user()` from Flask-Login
+- Flash message: `"Ha cerrado la sesión exitosamente."`
+- Redirects to login page
+
+#### Example
+
+```html
+<!-- In navigation template -->
+<a href="{{ url_for('auth.logout') }}">Cerrar Sesión</a>
+```
+
+**JavaScript Example:**
+```javascript
+function logout() {
+    window.location.href = '/auth/logout';
+}
+```
+
+**Source Reference:** `app/auth/routes.py:68`
+
+---
+
+## Authentication Flow
+
+### Role-Based Redirection
+
+After successful login, users are redirected based on their role:
+
+```python
+if user.role == 'admin':
+    return redirect(url_for('admin.manage_users'))
+elif user.role == 'bibliotecario':
+    return redirect(url_for('admin.admin_dashboard'))
+elif user.role in ['premium', 'cliente']:
+    return redirect(url_for('main.premium_dashboard'))
+
+return redirect(url_for('main.index'))
+```
+
+### Session Management
+
+- Sessions use Flask-Login's `login_user()` with `remember=False`
+- Logout clears session data completely
+- All authenticated routes check `current_user.is_authenticated`
+
+### Security Features
+
+- CSRF protection via WTForms
+- Password hashing using Werkzeug
+- Automatic redirect for authenticated users accessing login/register
+- Document ID used as unique username

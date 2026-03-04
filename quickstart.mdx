@@ -1,80 +1,209 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Get SWL running in 5 minutes"
 ---
 
-## Get started in three steps
+Get your SWL Library Management System up and running quickly with this streamlined guide.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Python 3.8+** installed on your system
+- **Git** for cloning the repository
+- Basic command line familiarity
 
-### Step 2: Deploy your changes
+## Installation Steps
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone the Repository">
+    Download the SWL source code from GitHub:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    git clone https://github.com/MaickFeliz/SWL.git
+    cd SWL
+    ```
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Set Up Virtual Environment">
+    Create an isolated Python environment to avoid dependency conflicts:
 
-### Step 3: Go live
+    <CodeGroup>
+    ```bash Linux/Mac
+    python -m venv venv
+    source venv/bin/activate
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash Windows
+    python -m venv venv
+    .\venv\Scripts\activate
+    ```
+    </CodeGroup>
 
-## Next steps
+    <Note>
+      You should see `(venv)` appear in your terminal prompt, indicating the virtual environment is active.
+    </Note>
+  </Step>
 
-Now that you have your docs running, explore these key features:
+  <Step title="Install Dependencies">
+    Upgrade pip and install all required packages:
+
+    ```bash
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+    ```
+
+    This installs Flask, SQLAlchemy, and all other dependencies from `requirements.txt`.
+  </Step>
+
+  <Step title="Run the Application">
+    Start the development server. The database will be automatically initialized on first run:
+
+    ```bash
+    python run.py
+    ```
+
+    You'll see output indicating:
+    - Database creation (SQLite by default)
+    - Default admin account creation
+    - Sample inventory items seeded
+    - Server started on `http://0.0.0.0:5000`
+
+    <Note>
+      The application is accessible at:
+      - Local: `http://localhost:5000`
+      - Network: `http://0.0.0.0:5000` (from other devices on your network)
+    </Note>
+  </Step>
+
+  <Step title="Access the System">
+    Open your browser and navigate to `http://localhost:5000`.
+
+    Log in with the default admin credentials:
+    - **Document ID:** `1000000000`
+    - **Password:** `admin123`
+
+    <Warning>
+      **Change the default password immediately** after your first login. Access the profile section to update your credentials.
+    </Warning>
+  </Step>
+</Steps>
+
+## Default Configuration
+
+On first run, SWL automatically creates:
+
+### Admin Account
+
+```python
+Document ID: 1000000000
+Full Name: Administrador Principal
+Role: admin
+Email: admin@biblioteca.com
+Password: admin123
+```
+
+### Sample Inventory
+
+The system seeds initial inventory items:
+
+- **Mouse USB** - 50 units (general)
+- **VideoBeam** - 10 units (premium)
+- **Cable HDMI** - 20 units (premium)
+- **Televisor** - 5 units (premium)
+- **Regleta/Extension** - 15 units (premium)
+- **Kit LEGO Education** - 8 units (premium)
+
+Each item has unique serial codes generated automatically (e.g., `MOU-1-001`, `VID-2-001`).
+
+## First Steps
+
+After logging in as admin, you should:
 
 <CardGroup cols={2}>
+  <Card title="Change Admin Password" icon="key">
+    Navigate to your profile and update the default password immediately.
+  </Card>
+  <Card title="Create Users" icon="user-plus" href="/admin/user-roles">
+    Add librarians, premium users, and students with appropriate roles.
+  </Card>
+  <Card title="Configure Settings" icon="gear" href="/admin/configuration">
+    Customize penalty fees, loan durations, and other system settings.
+  </Card>
+  <Card title="Add Inventory" icon="boxes" href="/features/inventory-management">
+    Expand your catalog with books, equipment, and accessories specific to your institution.
+  </Card>
+</CardGroup>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+## Verify Installation
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+Test that everything is working:
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+1. **Admin Dashboard**: Navigate to `/admin/dashboard` to view loan statistics
+2. **User Management**: Go to `/admin/users` to see the user list
+3. **Catalog**: Visit `/admin/catalog` to view inventory items
+4. **Fast Loan Kiosk**: Access `/fast_loan` to test the self-service mode
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+## Troubleshooting
 
+<Accordion title="Port 5000 already in use">
+  If you see "Address already in use" error:
+
+  ```bash
+  # Find the process using port 5000
+  lsof -i :5000  # Mac/Linux
+  netstat -ano | findstr :5000  # Windows
+
+  # Kill the process or change the port in run.py
+  ```
+</Accordion>
+
+<Accordion title="Module not found errors">
+  Ensure your virtual environment is activated and dependencies are installed:
+
+  ```bash
+  # Activate venv
+  source venv/bin/activate  # or .\venv\Scripts\activate on Windows
+
+  # Reinstall dependencies
+  pip install -r requirements.txt
+  ```
+</Accordion>
+
+<Accordion title="Database initialization fails">
+  If the database doesn't initialize:
+
+  ```bash
+  # Delete the instance folder and restart
+  rm -rf instance/
+  python run.py
+  ```
+</Accordion>
+
+<Accordion title="Cannot access from other devices">
+  Make sure:
+  - The server is running with `host='0.0.0.0'` (default in `run.py`)
+  - Your firewall allows connections on port 5000
+  - Devices are on the same network
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Detailed Installation" icon="download" href="/installation">
+    Learn about production deployment, PostgreSQL setup, and advanced configuration.
+  </Card>
+  <Card title="User Management" icon="users" href="/features/user-management">
+    Understand the multi-tier user system and role-based permissions.
+  </Card>
+  <Card title="Loan System" icon="handshake" href="/features/loan-system">
+    Explore how the loan workflow, approvals, and penalties work.
+  </Card>
+  <Card title="Admin Guide" icon="shield" href="/guides/admin-guide">
+    Complete guide to system administration and configuration.
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  For production deployment with PostgreSQL, Gunicorn, and Nginx, see the [Installation Guide](/installation).
 </Note>

@@ -1,0 +1,506 @@
+---
+title: 'Visit Tracking'
+description: 'Library visit logging and activity tracking for usage analytics'
+icon: 'door-open'
+---
+
+## Overview
+
+The Visit Tracking system logs all library visits, capturing visitor information, entry times, and activities. This feature provides valuable usage statistics and helps track library traffic patterns without requiring user authentication.
+
+## Purpose
+
+<CardGroup cols={2}>
+  <Card title="Usage Analytics" icon="chart-line">
+    Track library traffic patterns and peak hours
+  </Card>
+  <Card title="Activity Insights" icon="magnifying-glass-chart">
+    Understand what activities users engage in (study, research, computer use)
+  </Card>
+  <Card title="Compliance" icon="file-contract">
+    Meet institutional reporting requirements for library utilization
+  </Card>
+  <Card title="Resource Planning" icon="calendar-days">
+    Make data-driven decisions about staffing and resource allocation
+  </Card>
+</CardGroup>
+
+## LibraryLog Model
+
+The LibraryLog model captures visit information:
+
+```python app/models.py
+class LibraryLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    visitor_name = db.Column(db.String(100), nullable=False)
+    visitor_id = db.Column(db.String(20), nullable=False)
+    role = db.Column(db.String(20), nullable=False) 
+    entry_time = db.Column(db.DateTime, default=datetime.utcnow)
+    activity = db.Column(db.String(50), nullable=False)
+```
+
+### Fields Explained
+
+| Field | Type | Description | Example |
+|-------|------|-------------|----------|
+| `visitor_name` | String | Full name of visitor | "María García" |
+| `visitor_id` | String | Document ID number | "123456789" |
+| `role` | String | User role or "Visitante" | "cliente", "premium", "Visitante" |
+| `entry_time` | DateTime | Timestamp of visit (UTC) | 2024-03-15 14:30:00 |
+| `activity` | String | Purpose of visit | "Estudio", "Computadores", "Lectura" |
+
+## Visit Registration Route
+
+The visit registration route handles both registered users and walk-in visitors:
+
+```python app/main/routes.py
+@bp.route('/visit', methods=['GET', 'POST'])
+def register_visit():
+    form = VisitForm()
+    
+    if form.validate_on_submit():
+        document_id = form.document_id.data.strip()
+        activity = form.activity.data.strip()
+        manual_name = form.visitor_name.data.strip() if form.visitor_name.data else ''
+        
+        # Check if user is registered
+        user = User.query.filter_by(document_id=document_id).first()
+        
+        if user:
+            # Registered user - use account info
+            name, role = user.full_name, user.role
+        else:
+            # Unregistered visitor - require manual name
+            if not manual_name:
+                flash('Documento no registrado. Por favor ingrese su Nombre.', 'warning')
+                return render_template('main/visit.html', form=form, pre_doc=document_id)
+            name, role = manual_name, 'Visitante'
+            
+        # Create visit log entry
+        visit = LibraryLog(
+            visitor_name=name, 
+            visitor_id=document_id, 
+            role=role, 
+            activity=activity
+        )
+        db.session.add(visit)
+        db.session.commit()
+        
+        flash(f'Bienvenido/a {name}. Actividad: {activity}', 'success')
+        return redirect(url_for('main.register_visit'))
+        
+    return render_template('main/visit.html', form=form)
+```
+
+## User Flows
+
+### Registered User Flow
+
+<Steps>
+  <Step title="Enter Document ID">
+    User enters their registered document ID number
+  </Step>
+  <Step title="Automatic Lookup">
+    System retrieves user's full name and role from database
+  </Step>
+  <Step title="Select Activity">
+    User chooses visit purpose from predefined list
+  </Step>
+  <Step title="Confirmation">
+    System logs visit and displays welcome message with user's name
+  </Step>
+</Steps>
+
+```python
+# Registered user lookup
+user = User.query.filter_by(document_id=document_id).first()
+if user:
+    name, role = user.full_name, user.role
+```
+
+### Unregistered Visitor Flow
+
+<Steps>
+  <Step title="Enter Document ID">
+    Visitor enters their document ID (not in system)
+  </Step>
+  <Step title="Manual Name Entry">
+    System prompts for manual name entry
+  </Step>
+  <Step title="Select Activity">
+    Visitor chooses visit purpose
+  </Step>
+  <Step title="Guest Registration">
+    System logs visit with role "Visitante"
+  </Step>
+</Steps>
+
+```python
+# Unregistered visitor handling
+if not user:
+    if not manual_name:
+        flash('Documento no registrado. Por favor ingrese su Nombre.', 'warning')
+        return render_template('main/visit.html', form=form, pre_doc=document_id)
+    name, role = manual_name, 'Visitante'
+```
+
+<Info>
+  **Guest Access**: The system allows non-registered visitors to log their visits, making it useful for public libraries or open-access study spaces.
+</Info>
+
+## VisitForm Structure
+
+```python app/forms.py
+class VisitForm(FlaskForm):
+    document_id = StringField(
+        'Documento de Identidad', 
+        validators=[DataRequired(), Length(min=5, max=20)]
+    )
+    visitor_name = StringField(
+        'Nombre Completo (solo si no estás registrado)', 
+        validators=[Optional(), Length(max=100)]
+    )
+    activity = SelectField(
+        'Actividad', 
+        choices=[
+            ('Estudio', 'Estudio'),
+            ('Lectura', 'Lectura'),
+            ('Computadores', 'Uso de Computadores'),
+            ('Investigación', 'Investigación'),
+            ('Consulta', 'Consulta de Material'),
+            ('Otro', 'Otro')
+        ],
+        validators=[DataRequired()]
+    )
+    submit = SubmitField('Registrar Visita')
+```
+
+### Activity Options
+
+<AccordionGroup>
+  <Accordion title="Estudio" defaultOpen>
+    General study and homework activities
+  </Accordion>
+  <Accordion title="Lectura">
+    Reading books, magazines, or other materials
+  </Accordion>
+  <Accordion title="Computadores">
+    Using library computers or internet access
+  </Accordion>
+  <Accordion title="Investigación">
+    Academic research and reference consultation
+  </Accordion>
+  <Accordion title="Consulta">
+    Looking up specific materials or resources
+  </Accordion>
+  <Accordion title="Otro">
+    Other activities not listed
+  </Accordion>
+</AccordionGroup>
+
+## Template Implementation
+
+### Basic Visit Form
+
+```html
+<form method="POST" action="{{ url_for('main.register_visit') }}">
+  {{ form.hidden_tag() }}
+  
+  <div class="form-group">
+    {{ form.document_id.label }}
+    {{ form.document_id(class="form-control", 
+                       placeholder="Ingrese su documento",
+                       value=pre_doc if pre_doc else '') }}
+  </div>
+  
+  <div class="form-group">
+    {{ form.visitor_name.label }}
+    {{ form.visitor_name(class="form-control", 
+                        placeholder="Solo si no está registrado") }}
+  </div>
+  
+  <div class="form-group">
+    {{ form.activity.label }}
+    {{ form.activity(class="form-control") }}
+  </div>
+  
+  {{ form.submit(class="btn btn-primary") }}
+</form>
+```
+
+### Welcome Message
+
+```html
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }}" role="alert">
+      {{ message }}
+      {# e.g., "Bienvenido/a María García. Actividad: Estudio" #}
+    </div>
+  {% endfor %}
+{% endwith %}
+```
+
+## Analytics and Reporting
+
+### Visit Count by Date
+
+```python
+from sqlalchemy import func, Date
+
+# Daily visit counts
+daily_visits = db.session.query(
+    func.date(LibraryLog.entry_time).label('date'),
+    func.count(LibraryLog.id).label('count')
+).group_by(func.date(LibraryLog.entry_time)).all()
+```
+
+### Visit Count by Activity
+
+```python
+# Activity distribution
+activity_stats = db.session.query(
+    LibraryLog.activity,
+    func.count(LibraryLog.id).label('count')
+).group_by(LibraryLog.activity).order_by(
+    func.count(LibraryLog.id).desc()
+).all()
+```
+
+### Visit Count by Role
+
+```python
+# User type breakdown
+role_distribution = db.session.query(
+    LibraryLog.role,
+    func.count(LibraryLog.id).label('count')
+).group_by(LibraryLog.role).all()
+```
+
+### Peak Hours Analysis
+
+```python
+from sqlalchemy import extract
+
+# Hourly traffic patterns
+hourly_traffic = db.session.query(
+    extract('hour', LibraryLog.entry_time).label('hour'),
+    func.count(LibraryLog.id).label('count')
+).group_by(extract('hour', LibraryLog.entry_time)).order_by('hour').all()
+```
+
+## Use Cases
+
+### Kiosk-Style Entry Terminal
+
+Deploy on a tablet or touchscreen at library entrance:
+
+```yaml
+Setup:
+  - Touchscreen tablet mounted at entrance
+  - Browser locked to /visit route
+  - Large, simple UI for quick entry
+  - Optional barcode scanner for document IDs
+
+Workflow:
+  - User scans ID card or enters manually
+  - Taps activity button
+  - Receives welcome message
+  - Total time: < 10 seconds
+```
+
+### Staffed Reception Desk
+
+Librarian logs visitors manually:
+
+```yaml
+Setup:
+  - Desktop computer at reception
+  - /visit route open in browser tab
+  
+Workflow:
+  - Visitor states document ID
+  - Librarian enters ID and activity
+  - Librarian verifies welcome message shows correct name
+  - Visitor proceeds into library
+```
+
+### Reporting Dashboard
+
+Generate usage reports for administrators:
+
+```python
+@bp.route('/admin/visit_stats')
+@role_required('admin', 'bibliotecario')
+def visit_statistics():
+    # Get date range from request
+    start_date = request.args.get('start', default_start)
+    end_date = request.args.get('end', default_end)
+    
+    # Query visits in range
+    visits = LibraryLog.query.filter(
+        LibraryLog.entry_time >= start_date,
+        LibraryLog.entry_time <= end_date
+    ).all()
+    
+    # Calculate statistics
+    total_visits = len(visits)
+    unique_visitors = len(set(v.visitor_id for v in visits))
+    activity_breakdown = {...}
+    
+    return render_template('admin/visit_stats.html', 
+                         total=total_visits,
+                         unique=unique_visitors,
+                         activities=activity_breakdown)
+```
+
+## Data Privacy Considerations
+
+<Warning>
+  **Personal Data**: Visit logs contain personally identifiable information (names and document IDs). Ensure compliance with local data protection regulations.
+</Warning>
+
+### Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Data Retention Policy" icon="calendar-xmark">
+    Implement automatic deletion of logs older than necessary (e.g., 1 year)
+  </Card>
+  <Card title="Access Control" icon="shield-halved">
+    Restrict visit log viewing to admin and bibliotecario roles only
+  </Card>
+  <Card title="Anonymization" icon="user-secret">
+    For public reports, aggregate data without showing individual names
+  </Card>
+  <Card title="Informed Consent" icon="handshake">
+    Display privacy notice at visit registration terminal
+  </Card>
+</CardGroup>
+
+### Implementing Data Retention
+
+```python
+from datetime import datetime, timedelta
+
+@staticmethod
+def purge_old_visits(days=365):
+    """Delete visit logs older than specified days"""
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    old_visits = LibraryLog.query.filter(
+        LibraryLog.entry_time < cutoff_date
+    ).delete()
+    db.session.commit()
+    return old_visits
+```
+
+## Integration with Other Features
+
+### Linking to User Accounts
+
+```python
+# Optional: Add relationship to User model
+class User(UserMixin, db.Model):
+    # ... existing fields ...
+    visits = db.relationship('LibraryLog', 
+                            primaryjoin='User.document_id==LibraryLog.visitor_id',
+                            foreign_keys='LibraryLog.visitor_id',
+                            backref='registered_user',
+                            lazy='dynamic')
+```
+
+### Combining with Loan Data
+
+```python
+# User profile showing both loans and visits
+@bp.route('/profile')
+@login_required
+def profile():
+    loans = Loan.query.filter_by(user_id=current_user.id).all()
+    visits = LibraryLog.query.filter_by(visitor_id=current_user.document_id).all()
+    
+    return render_template('main/profile.html', 
+                         loans=loans, 
+                         visits=visits)
+```
+
+### Activity-Based Recommendations
+
+```python
+# Suggest resources based on visit activities
+frequent_activities = db.session.query(LibraryLog.activity).filter(
+    LibraryLog.visitor_id == user.document_id
+).group_by(LibraryLog.activity).order_by(
+    func.count(LibraryLog.activity).desc()
+).limit(3).all()
+
+if 'Computadores' in [a[0] for a in frequent_activities]:
+    # Recommend computing equipment catalog
+    recommendations = Catalog.query.filter_by(category='computo').all()
+```
+
+## Customization Examples
+
+### Adding Custom Activities
+
+Extend the activity dropdown with institution-specific options:
+
+```python
+activity = SelectField(
+    'Actividad', 
+    choices=[
+        ('Estudio', 'Estudio'),
+        ('Lectura', 'Lectura'),
+        ('Computadores', 'Uso de Computadores'),
+        ('Investigación', 'Investigación'),
+        ('Consulta', 'Consulta de Material'),
+        ('Tutoría', 'Sesión de Tutoría'),  # Custom
+        ('Grupo', 'Trabajo en Grupo'),      # Custom
+        ('Impresión', 'Impresión/Escaneo'), # Custom
+        ('Otro', 'Otro')
+    ],
+    validators=[DataRequired()]
+)
+```
+
+### Exit Time Tracking
+
+Modify the model to track both entry and exit:
+
+```python
+class LibraryLog(db.Model):
+    # ... existing fields ...
+    exit_time = db.Column(db.DateTime, nullable=True)
+    
+    @property
+    def duration_minutes(self):
+        if self.exit_time and self.entry_time:
+            delta = self.exit_time - self.entry_time
+            return delta.total_seconds() / 60
+        return None
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Duplicate Visits Being Logged">
+    Check if form is being submitted multiple times. Implement redirect-after-POST pattern (already in place) and consider adding a cooldown period.
+  </Accordion>
+  
+  <Accordion title="Visitor Name Not Pre-Filling">
+    Ensure the `pre_doc` variable is passed to template on validation failure: `render_template('main/visit.html', form=form, pre_doc=document_id)`
+  </Accordion>
+  
+  <Accordion title="Timezone Issues in Reports">
+    All `entry_time` values are stored in UTC. Convert to local timezone when displaying: `entry_time_local = log.entry_time - timedelta(hours=5)`
+  </Accordion>
+  
+  <Accordion title="Performance Issues with Large Datasets">
+    Add database indexes on frequently queried columns: `db.Index('idx_entry_time', LibraryLog.entry_time)` and `db.Index('idx_visitor_id', LibraryLog.visitor_id)`
+  </Accordion>
+</AccordionGroup>
+
+## Related Features
+
+- [User Management](/features/user-management) - How visitor roles are determined
+- [Fast Loan Kiosk](/features/fast-loan-kiosk) - Similar document ID lookup mechanism
+- [Loan System](/features/loan-system) - Correlating visits with borrowing behavior
