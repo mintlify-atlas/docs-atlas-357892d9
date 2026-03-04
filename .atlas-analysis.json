@@ -1,0 +1,102 @@
+{
+  "projectType": "saas",
+  "projectName": "SWL Library Management System",
+  "projectDescription": "A comprehensive open-source library management platform for educational institutions and enterprises to manage inventory, equipment loans, and access control.",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#60a5fa",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/user-management",
+              "features/loan-system",
+              "features/inventory-management",
+              "features/fast-loan-kiosk",
+              "features/visit-tracking"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/student-guide",
+              "guides/premium-user-guide",
+              "guides/librarian-guide",
+              "guides/admin-guide"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/configuration",
+              "admin/user-roles",
+              "admin/database-setup",
+              "admin/deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/user",
+              "api/models/catalog",
+              "api/models/item-instance",
+              "api/models/loan",
+              "api/models/library-log"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/loan-service",
+              "api/services/inventory-service"
+            ]
+          },
+          {
+            "group": "Routes",
+            "pages": [
+              "api/routes/auth",
+              "api/routes/main",
+              "api/routes/admin"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-tier user management (Admin, Librarian, Premium, Regular)",
+    "Real-time loan validation and approval workflows",
+    "Dynamic inventory tracking with serial number management",
+    "Fast Loan kiosk mode for high-traffic self-service",
+    "Automated overdue detection with penalty calculations",
+    "Visit logging and usage statistics"
+  ],
+  "publicApiSurface": [
+    "User model with role-based authentication",
+    "Catalog and ItemInstance for inventory management",
+    "Loan model with status tracking and penalty system",
+    "LoanService.can_request_laptop()",
+    "LoanService.approve_loan()",
+    "InventoryService.reserve_instances()",
+    "LibraryLog for visit tracking",
+    "Flask blueprints: auth, main, admin"
+  ]
+}
