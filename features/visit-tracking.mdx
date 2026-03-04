@@ -152,30 +152,18 @@ if not user:
 
 ```python app/forms.py
 class VisitForm(FlaskForm):
-    document_id = StringField(
-        'Documento de Identidad', 
-        validators=[DataRequired(), Length(min=5, max=20)]
-    )
-    visitor_name = StringField(
-        'Nombre Completo (solo si no estás registrado)', 
-        validators=[Optional(), Length(max=100)]
-    )
-    activity = SelectField(
-        'Actividad', 
-        choices=[
-            ('Estudio', 'Estudio'),
-            ('Lectura', 'Lectura'),
-            ('Computadores', 'Uso de Computadores'),
-            ('Investigación', 'Investigación'),
-            ('Consulta', 'Consulta de Material'),
-            ('Otro', 'Otro')
-        ],
-        validators=[DataRequired()]
-    )
+    document_id = StringField('Documento', validators=[DataRequired()])
+    activity = StringField('Actividad', validators=[DataRequired()])
     submit = SubmitField('Registrar Visita')
 ```
 
-### Activity Options
+<Note>
+  **Form Fields**: The form uses simple `StringField` for activity to allow free-text entry. The template (`main/visit.html`) includes an additional `visitor_name` field for unregistered visitors, which is accessed in the route handler via `form.visitor_name.data`.
+</Note>
+
+### Activity Examples
+
+Common activities logged by visitors include:
 
 <AccordionGroup>
   <Accordion title="Estudio" defaultOpen>

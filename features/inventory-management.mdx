@@ -71,17 +71,22 @@ class ItemInstance(db.Model):
 
 ## Categories
 
-The system supports four main categories:
+The system supports multiple categories for organizing inventory:
 
 | Category | Description | Examples | Penalty on Overdue |
 |----------|-------------|----------|-------------------|
-| `general` | Basic library items | Calculators, USB drives | No |
-| `premium` | High-value items | Tablets, cameras | No |
-| `computo` | Computing equipment | Laptops, monitors | No |
-| `libro` | Books and reading material | Textbooks, novels | Yes (fee per day) |
+| `computo` | Computing equipment | Laptops, monitors, tablets | No |
+| `accesorio` | Accessories and general items | Cables, mice, chargers | No |
+| `libro` | Books and reading material | Textbooks, novels, periodicals | Yes (fee per day) |
+
+<Note>
+  **Category Configuration**: When creating new catalog items via the admin interface (`/admin/catalog`), you can choose from three categories: **Equipo de Cómputo** (`computo`), **Accesorio / General** (`accesorio`), or **Libro** (`libro`) as defined in `CatalogForm`. 
+  
+  The seed data in `run.py` also uses legacy categories `general` and `premium` for backward compatibility with existing data.
+</Note>
 
 <Info>
-  **Access Control**: Premium users can access all categories. Cliente users cannot request `premium` category items.
+  **Access Control**: Premium users can access specialized equipment. Cliente (regular) users have access to computing and general accessories but may be restricted from certain premium items based on role-based filtering in the routes.
 </Info>
 
 ## Item Statuses
